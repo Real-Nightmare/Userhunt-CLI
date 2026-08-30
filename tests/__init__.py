@@ -1,1 +1,0 @@
-"""Userhunt CLI tests."""
