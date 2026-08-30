@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "userhunt-cli"
-version = "2.3.0"
+version = "1.0.0"
 description = "Userhunt CLI — Autonomous AI-powered OSINT toolkit with deep hunt engine"
 readme = "README.md"
 license = {text = "MIT"}

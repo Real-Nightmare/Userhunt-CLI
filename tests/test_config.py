@@ -158,7 +158,7 @@ class TestHuntConfig:
         assert h.compress_output is True
         assert h.disk_warn_mb == 2000
         assert h.disk_abort_mb == 500
-        assert h.tool_timeout == 420
+        assert h.tool_timeout == 0  # 0 = no timeout (runs to completion)
 
     def test_to_dict(self):
         h = HuntConfig()

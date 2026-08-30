@@ -1,7 +1,7 @@
 """
 Userhunt CLI — Autonomous AI-powered OSINT toolkit
 """
-__version__ = "2.3.0"
+__version__ = "1.0.0"
 __author__ = "Userhunt CLI"
 
 from userhunt.config import Config

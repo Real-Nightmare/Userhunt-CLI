@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.live import Live
 from rich import box
 from rich.text import Text
 
@@ -50,7 +51,7 @@ def logo() -> None:
 ║    ╚████╔╝ ██║███████╗   ██║   ██║     ██║  ██║██║    ║
 ║     ╚═══╝  ╚═╝╚══════╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═╝    ║
 ║                                                          ║
-║        Autonomous AI-Powered OSINT Toolkit v2.3          ║
+║        Autonomous AI-Powered OSINT Toolkit v1.0.0        ║
 ║                    Deep Hunt Engine                       ║
 ║          Live Dashboard: http://0.0.0.0:8000             ║
 ╚══════════════════════════════════════════════════════════╝
@@ -235,6 +236,62 @@ def show_case(case: Case) -> None:
     Prompt.ask("\nPress Enter to continue")
 
 
+def _make_live_status_table(scan_manager: ScanManager, rnd: int, total_rounds: int, elapsed: float, total_hits: int) -> Table:
+    """Build the live-updating tool status table."""
+    table = Table(
+        title=f"[bold cyan]ROUND {rnd}/{total_rounds} — Tool Status[/bold cyan]",
+        box=box.ROUNDED,
+        show_header=True,
+        expand=True,
+        border_style="cyan",
+    )
+    table.add_column("Tool", style="bold white", width=18)
+    table.add_column("Category", style="dim", width=10)
+    table.add_column("Status", width=10)
+    table.add_column("Hits", justify="right", width=6)
+    table.add_column("Time", justify="right", width=8)
+    table.add_column("Error", style="red", width=30, no_wrap=True, overflow="ellipsis")
+    
+    status_colors = {
+        "PENDING": "[dim]⏳ PENDING[/dim]",
+        "RUNNING": "[bold yellow]🔄 RUNNING[/bold yellow]",
+        "OK": "[bold green]✅ OK[/bold green]",
+        "FAIL": "[bold red]❌ FAIL[/bold red]",
+        "SKIPPED": "[dim]⏭ SKIP[/dim]",
+    }
+    
+    rows = scan_manager.get_status_rows()
+    for r in rows:
+        elapsed_str = f"{r['elapsed']:.1f}s" if r['elapsed'] > 0 else "-"
+        table.add_row(
+            r["name"],
+            r["category"],
+            status_colors.get(r["status"], r["status"]),
+            str(r["hits"]) if r["hits"] > 0 else "-",
+            elapsed_str,
+            r["error"],
+        )
+    
+    # Summary footer
+    ok_count = sum(1 for r in rows if r["status"] == "OK")
+    fail_count = sum(1 for r in rows if r["status"] == "FAIL")
+    running_count = sum(1 for r in rows if r["status"] == "RUNNING")
+    pending_count = sum(1 for r in rows if r["status"] == "PENDING")
+    total_tools = len(rows)
+    
+    table.add_section()
+    table.add_row(
+        f"[bold]TOTAL: {total_tools} tools[/bold]",
+        "",
+        f"[green]{ok_count}✅[/green] [red]{fail_count}❌[/red] [yellow]{running_count}🔄[/yellow] [dim]{pending_count}⏳[/dim]",
+        f"[bold]{total_hits}[/bold]",
+        f"{elapsed:.0f}s",
+        "",
+    )
+    
+    return table
+
+
 # ── Deep hunt ──────────────────────────────────────────────────────
 
 def run_deep_hunt(case: Case) -> None:
@@ -273,156 +330,167 @@ def run_deep_hunt(case: Case) -> None:
     console.print(f"[bold green]>> Userhunt deep hunt starting (rounds 1-{config.hunt.max_rounds})[/bold green]")
     console.print("[bold green]>> Dashboard: http://0.0.0.0:8000[/bold green]")
 
-    for rnd in range(1, config.hunt.max_rounds + 1):
-        case.round = rnd
-        case.reset_round_caps()
+    # Run the scan inside a Rich Live display for the tool status table
+    # The scan blocks the main thread — that's intentional so the Live table works
+    with Live(console=console, refresh_per_second=2, screen=False) as live:
+        # Show initial table with all tools PENDING
+        live.update(_make_live_status_table(scan_manager, 1, config.hunt.max_rounds, 0, 0))
 
-        if ai_engine:
-            ai_engine.reset_round()
+        for rnd in range(1, config.hunt.max_rounds + 1):
+            case.round = rnd
+            case.reset_round_caps()
 
-        dashboard.set_round(rnd, config.hunt.max_rounds)
-        dashboard.log(f"=== ROUND {rnd}/{config.hunt.max_rounds} ===", source="hunt")
+            if ai_engine:
+                ai_engine.reset_round()
 
-        console.print(f"[bold cyan]=== ROUND {rnd}/{config.hunt.max_rounds} ===[/bold cyan]")
+            dashboard.set_round(rnd, config.hunt.max_rounds)
+            dashboard.log(f"=== ROUND {rnd}/{config.hunt.max_rounds} ===", source="hunt")
 
-        # ── Username hunt ──
-        usernames = [u for u in case.usernames if u not in case.done_usernames]
-        if usernames:
-            dashboard.log(f"Scanning {len(usernames)} username(s)...", source="username")
-            console.print(f">> deep username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})")
-            round_hits = scan_manager.scan_usernames(usernames)
-            for hit in round_hits:
-                case.add_hit(hit)
-            for u in usernames:
-                case.done_usernames.add(u)
-            dashboard.log(f"Username scan: {len(round_hits)} hits", source="username")
-            console.print(f"   [dim]Username scan: {len(round_hits)} hits[/dim]")
+            # ── Username hunt ──
+            usernames = [u for u in case.usernames if u not in case.done_usernames]
+            if usernames:
+                dashboard.log(f"Scanning {len(usernames)} username(s)...", source="username")
+                console.print(f">> deep username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})")
+                round_hits = scan_manager.scan_usernames(usernames)
+                for hit in round_hits:
+                    case.add_hit(hit)
+                for u in usernames:
+                    case.done_usernames.add(u)
+                dashboard.log(f"Username scan: {len(round_hits)} hits", source="username")
+                # Update live table after each scanner category
+                live.update(_make_live_status_table(scan_manager, rnd, config.hunt.max_rounds, time.time() - start_time, len(case.hits)))
 
-        # ── Email hunt ──
-        emails = [e for e in case.emails if e not in case.done_emails]
-        if emails:
-            dashboard.log(f"Scanning {len(emails)} email(s)...", source="email")
-            console.print(f">> deep email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})")
-            round_hits = scan_manager.scan_emails(emails)
-            for hit in round_hits:
-                case.add_hit(hit)
-            for e in emails:
-                case.done_emails.add(e)
-            dashboard.log(f"Email scan: {len(round_hits)} hits", source="email")
-            console.print(f"   [dim]Email scan: {len(round_hits)} hits[/dim]")
+            # ── Email hunt ──
+            emails = [e for e in case.emails if e not in case.done_emails]
+            if emails:
+                dashboard.log(f"Scanning {len(emails)} email(s)...", source="email")
+                console.print(f">> deep email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})")
+                round_hits = scan_manager.scan_emails(emails)
+                for hit in round_hits:
+                    case.add_hit(hit)
+                for e in emails:
+                    case.done_emails.add(e)
+                dashboard.log(f"Email scan: {len(round_hits)} hits", source="email")
+                live.update(_make_live_status_table(scan_manager, rnd, config.hunt.max_rounds, time.time() - start_time, len(case.hits)))
 
-        # ── Name hunt ──
-        names = [n for n in case.names if n not in case.done_names]
-        if names:
-            dashboard.log(f"Scanning {len(names)} name(s)...", source="name")
-            console.print(f">> deep name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})")
-            round_hits = scan_manager.scan_names(names)
-            for hit in round_hits:
-                case.add_hit(hit)
-            for n in names:
-                case.done_names.add(n)
-            dashboard.log(f"Name scan: {len(round_hits)} hits", source="name")
-            console.print(f"   [dim]Name scan: {len(round_hits)} hits[/dim]")
+            # ── Name hunt ──
+            names = [n for n in case.names if n not in case.done_names]
+            if names:
+                dashboard.log(f"Scanning {len(names)} name(s)...", source="name")
+                console.print(f">> deep name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})")
+                round_hits = scan_manager.scan_names(names)
+                for hit in round_hits:
+                    case.add_hit(hit)
+                for n in names:
+                    case.done_names.add(n)
+                dashboard.log(f"Name scan: {len(round_hits)} hits", source="name")
+                live.update(_make_live_status_table(scan_manager, rnd, config.hunt.max_rounds, time.time() - start_time, len(case.hits)))
 
-        # ── Phone hunt (from pivot-extracted phones) ──
-        phones = list(case.done_phones)
-        if phones:
-            dashboard.log(f"Scanning {len(phones)} phone(s)...", source="phone")
-            round_hits = scan_manager.scan_phones(phones)
-            for hit in round_hits:
-                case.add_hit(hit)
-            dashboard.log(f"Phone scan: {len(round_hits)} hits", source="phone")
+            # ── Phone hunt (from pivot-extracted phones) ──
+            phones = list(case.done_phones)
+            if phones:
+                dashboard.log(f"Scanning {len(phones)} phone(s)...", source="phone")
+                round_hits = scan_manager.scan_phones(phones)
+                for hit in round_hits:
+                    case.add_hit(hit)
+                dashboard.log(f"Phone scan: {len(round_hits)} hits", source="phone")
+                live.update(_make_live_status_table(scan_manager, rnd, config.hunt.max_rounds, time.time() - start_time, len(case.hits)))
 
-        # ── Domain hunt (from pivot-extracted domains) ──
-        domains = list(case.done_domains)
-        if domains:
-            dashboard.log(f"Scanning {len(domains)} domain(s)...", source="domain")
-            round_hits = scan_manager.scan_domains(domains)
-            for hit in round_hits:
-                case.add_hit(hit)
-            dashboard.log(f"Domain scan: {len(round_hits)} hits", source="domain")
+            # ── Domain hunt (from pivot-extracted domains) ──
+            domains = list(case.done_domains)
+            if domains:
+                dashboard.log(f"Scanning {len(domains)} domain(s)...", source="domain")
+                round_hits = scan_manager.scan_domains(domains)
+                for hit in round_hits:
+                    case.add_hit(hit)
+                dashboard.log(f"Domain scan: {len(round_hits)} hits", source="domain")
+                live.update(_make_live_status_table(scan_manager, rnd, config.hunt.max_rounds, time.time() - start_time, len(case.hits)))
 
-        # ── Clue hunt ──
-        if case.clues:
-            round_hits = scan_manager.scan_clues(case.clues)
-            for hit in round_hits:
-                case.add_hit(hit)
-            console.print(f"   [dim]Clue scan: {len(round_hits)} hits[/dim]")
+            # ── Clue hunt ──
+            if case.clues:
+                round_hits = scan_manager.scan_clues(case.clues)
+                for hit in round_hits:
+                    case.add_hit(hit)
 
-        # ── Update dashboard identifiers ──
-        dashboard.set_identifiers(case.usernames, case.emails, case.names)
+            # ── Update dashboard identifiers ──
+            dashboard.set_identifiers(case.usernames, case.emails, case.names)
 
-        # ── Evidence collection (link visitor) ──
-        dashboard.log("Collecting evidence from hit pages...", source="evidence")
-        console.print("   [dim]Collecting evidence from hit pages...[/dim]")
-        evidence_collector.visit_links(case.hits, rnd)
+            # ── Evidence collection (link visitor) ──
+            dashboard.log("Collecting evidence from hit pages...", source="evidence")
+            console.print("   [dim]Collecting evidence from hit pages...[/dim]")
+            evidence_collector.visit_links(case.hits, rnd)
 
-        # ── Confidence scoring ──
-        case.hits = confidence_engine.score(case.hits)
+            # ── Confidence scoring ──
+            case.hits = confidence_engine.score(case.hits)
 
-        # ── AI review ──
-        if ai_engine:
-            dashboard.log("AI reviewing scan results...", source="ai")
-            console.print("   [dim]AI reviewing scan results...[/dim]")
-            ai_engine.review_round(case, rnd)
+            # ── AI review ──
+            if ai_engine:
+                dashboard.log("AI reviewing scan results...", source="ai")
+                console.print("   [dim]AI reviewing scan results...[/dim]")
+                ai_engine.review_round(case, rnd)
 
-        # ── Pivot extraction and queueing ──
-        pivots = pivot_engine.extract_pivots(case, rnd)
-        applied = pivot_engine.apply_pivots_to_case(case, pivots)
+            # ── Pivot extraction and queueing ──
+            pivots = pivot_engine.extract_pivots(case, rnd)
+            applied = pivot_engine.apply_pivots_to_case(case, pivots)
 
-        # Log pivots to dashboard
-        for p in pivots:
-            p["time"] = time.time()
-            dashboard.add_pivot(p)
+            # Log pivots to dashboard
+            for p in pivots:
+                p["time"] = time.time()
+                dashboard.add_pivot(p)
 
-        # Show applied pivots
-        new_usernames = [p for p in applied if p.get("action") == "queue_username"]
-        new_emails = [p for p in applied if p.get("action") == "queue_email"]
-        new_phones = [p for p in applied if p.get("action") == "queue_phone"]
-        new_domains = [p for p in applied if p.get("action") == "queue_domain"]
+            # Show applied pivots
+            new_usernames = [p for p in applied if p.get("action") == "queue_username"]
+            new_emails = [p for p in applied if p.get("action") == "queue_email"]
+            new_phones = [p for p in applied if p.get("action") == "queue_phone"]
+            new_domains = [p for p in applied if p.get("action") == "queue_domain"]
 
-        if new_usernames or new_emails or new_phones or new_domains:
+            if new_usernames or new_emails or new_phones or new_domains:
+                dashboard.log(
+                    f"Pivots applied: {len(new_usernames)} usernames, "
+                    f"{len(new_emails)} emails, {len(new_phones)} phones, "
+                    f"{len(new_domains)} domains",
+                    source="pivot",
+                )
+
+            # Queue new phones/domains for next-round scanning
+            for p in new_phones:
+                val = p.get("found", "")
+                if val and val not in case.done_phones:
+                    case.done_phones.add(val)
+            for p in new_domains:
+                val = p.get("found", "")
+                if val and val not in case.done_domains:
+                    case.done_domains.add(val)
+
+            elapsed = time.time() - start_time
             dashboard.log(
-                f"Pivots applied: {len(new_usernames)} usernames, "
-                f"{len(new_emails)} emails, {len(new_phones)} phones, "
-                f"{len(new_domains)} domains",
-                source="pivot",
+                f"Round {rnd} complete. {len(case.hits)} total hits. "
+                f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.",
+                source="hunt",
+            )
+            console.print(
+                f"[dim]Round {rnd} complete. {len(case.hits)} total hits. "
+                f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.[/dim]"
             )
 
-        # Queue new phones/domains for next-round scanning
-        for p in new_phones:
-            val = p.get("found", "")
-            if val and val not in case.done_phones:
-                case.done_phones.add(val)
-        for p in new_domains:
-            val = p.get("found", "")
-            if val and val not in case.done_domains:
-                case.done_domains.add(val)
+            # Update case save
+            case.save(ws / "data" / "case.json")
 
-        elapsed = time.time() - start_time
-        dashboard.log(
-            f"Round {rnd} complete. {len(case.hits)} total hits. "
-            f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.",
-            source="hunt",
-        )
-        console.print(
-            f"[dim]Round {rnd} complete. {len(case.hits)} total hits. "
-            f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.[/dim]"
-        )
-
-        # Update case save
-        case.save(ws / "data" / "case.json")
-
-        if rnd < config.hunt.max_rounds:
-            try:
-                if not Confirm.ask("Continue to next round?", default=True):
+            if rnd < config.hunt.max_rounds:
+                try:
+                    if not Confirm.ask("Continue to next round?", default=True):
+                        break
+                except Exception:
                     break
-            except Exception:
-                break
 
     # ── Mark as done ──
     dashboard.set_status("done")
     dashboard.log(f"Deep hunt complete! {len(case.hits)} total hits.", source="hunt")
+
+    # ── Final tool status table (outside Live, stays on screen) ──
+    console.print()
+    console.print("[bold cyan]═══ FINAL TOOL STATUS ═══[/bold cyan]")
+    _print_final_status_table(scan_manager, case)
 
     # ── Purge temp files ──
     purge_temp_files(config.hunt.workspace)
@@ -438,6 +506,48 @@ def run_deep_hunt(case: Case) -> None:
     console.print(f"  JSON: {json_path}")
     console.print(f"  PDF:  {pdf_path}")
     console.print("[bold green]Dashboard still running at http://0.0.0.0:8000[/bold green]")
+
+
+def _print_final_status_table(scan_manager: ScanManager, case: Case) -> None:
+    """Print the final static tool status table after hunt completes."""
+    table = Table(box=box.ROUNDED, show_header=True, expand=True, border_style="green")
+    table.add_column("Tool", style="bold white", width=18)
+    table.add_column("Category", style="dim", width=10)
+    table.add_column("Status", width=10)
+    table.add_column("Hits", justify="right", width=6)
+    table.add_column("Time", justify="right", width=10)
+    table.add_column("Error", style="red", width=30, no_wrap=True, overflow="ellipsis")
+    
+    status_map = {
+        "PENDING": "[dim]⏳ PENDING[/dim]",
+        "RUNNING": "[bold yellow]🔄 RUNNING[/bold yellow]",
+        "OK": "[bold green]✅ OK[/bold green]",
+        "FAIL": "[bold red]❌ FAIL[/bold red]",
+        "SKIPPED": "[dim]⏭ SKIP[/dim]",
+    }
+    
+    for r in scan_manager.get_status_rows():
+        elapsed_str = f"{r['elapsed']:.1f}s" if r['elapsed'] > 0 else "-"
+        table.add_row(
+            r["name"],
+            r["category"],
+            status_map.get(r["status"], r["status"]),
+            str(r["hits"]) if r["hits"] > 0 else "-",
+            elapsed_str,
+            r["error"],
+        )
+    
+    rows = scan_manager.get_status_rows()
+    ok_count = sum(1 for r in rows if r["status"] == "OK")
+    fail_count = sum(1 for r in rows if r["status"] == "FAIL")
+    total = len(rows)
+    
+    table.add_section()
+    table.add_row(
+        f"[bold]SUMMARY: {ok_count}/{total} OK, {fail_count} FAILED[/bold]",
+        "", "", f"[bold]{len(case.hits)}[/bold]", "", "",
+    )
+    console.print(table)
 
 
 # ── Rebuild profile ────────────────────────────────────────────────
@@ -683,6 +793,55 @@ def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names:
         return
 
     run_interactive()
+
+
+# ── Clean command ──────────────────────────────────────────────────
+
+@main.command()
+@click.option("--deep", is_flag=True, help="Remove ALL workspace data including tools")
+def clean(deep: bool) -> None:
+    """Clean workspace to free disk space.
+
+    Default: removes output files, temp data, and case state.
+    --deep: also removes cloned OSINT tools (requires re-download on next run).
+    """
+    import shutil
+    ws = config.hunt.workspace
+    if not ws.exists():
+        console.print("[dim]No workspace found.[/dim]")
+        return
+
+    freed = 0
+    dirs_to_clean = []
+
+    if deep:
+        dirs_to_clean = ["output", "data", "tools"]
+        console.print("[bold yellow]DEEP CLEAN: removing tools, output, and data...[/bold yellow]")
+    else:
+        dirs_to_clean = ["output", "data"]
+        console.print("[yellow]Cleaning output and data (tools preserved)...[/yellow]")
+
+    for d in dirs_to_clean:
+        p = ws / d
+        if p.exists():
+            size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+            shutil.rmtree(p, ignore_errors=True)
+            freed += size
+            console.print(f"  [green]✓ Removed {d}/ ({size / 1024 / 1024:.1f} MB)[/green]")
+
+    # Clean __pycache__
+    for pycache in ws.rglob("__pycache__"):
+        size = sum(f.stat().st_size for f in pycache.rglob("*") if f.is_file())
+        shutil.rmtree(pycache, ignore_errors=True)
+        freed += size
+
+    # Recreate dirs
+    for d in ["output", "data", "tools"]:
+        (ws / d).mkdir(parents=True, exist_ok=True)
+
+    console.print(f"\n[bold green]Freed {freed / 1024 / 1024:.1f} MB[/bold green]")
+    if deep:
+        console.print("[dim]Tools removed. They will be re-downloaded on next run.[/dim]")
 
 
 # ── Upgrade command ────────────────────────────────────────────────
