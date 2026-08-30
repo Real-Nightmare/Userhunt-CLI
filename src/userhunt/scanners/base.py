@@ -12,9 +12,9 @@ class BaseScanner(ABC):
         self.name = "base"
         self.status = "CORE"
 
-    @abstractmethod
     def scan(self, targets: List[str]) -> List[Dict[str, Any]]:
-        ...
+        """Default scan — subclasses override scan_usernames/scan_emails/etc."""
+        return []
 
     def _make_hit(self, platform: str, url: str, confidence: str = "MEDIUM", **kwargs) -> Dict[str, Any]:
         return {

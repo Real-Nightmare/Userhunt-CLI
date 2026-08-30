@@ -3,13 +3,13 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "userhunt_cli"
-version = "2.0.0"
-description = "USERHUNT CLI — Autonomous AI-powered OSINT toolkit with deep hunt engine"
+name = "userhunt-cli"
+version = "2.1.0"
+description = "Userhunt CLI — Autonomous AI-powered OSINT toolkit with deep hunt engine"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-authors = [{name = "USERHUNT"}]
+authors = [{name = "Userhunt CLI"}]
 keywords = ["osint", "username", "investigation", "ai", "pivot"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -44,12 +44,14 @@ dependencies = [
     "tenacity>=8.2",
     "python-dotenv>=1.0",
     "geopy>=2.4",
+    "playwright>=1.40",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
-    "pytest-asyncio>=0.21",
+    "pytest-mock>=3.12",
+    "responses>=0.24",
     "black>=23.0",
     "ruff>=0.1",
     "mypy>=1.7",
@@ -70,4 +72,7 @@ target-version = "py310"
 
 [tool.mypy]
 python_version = "3.10"
-strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

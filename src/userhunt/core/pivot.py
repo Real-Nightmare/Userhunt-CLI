@@ -1,75 +1,135 @@
 """
 Pivot engine — extracts new identifiers from scan output and AI verdicts.
+Uses centralized extractors from utils.extractors.
 """
 import json
-import re
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 from collections import deque
 
 from userhunt.config import Config
+from userhunt.utils.extractors import (
+    extract_emails, extract_urls, extract_handles, extract_usernames_from_paths,
+    extract_discord_invites, extract_discord_snowflakes, extract_roblox_ids,
+    extract_btc_addresses, extract_phones, extract_domains,
+)
 
 
 class PivotEngine:
-    EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-    URL_RE = re.compile(r'https?://[^\s<>"\']+')
-    HANDLE_RE = re.compile(r'@([a-zA-Z0-9_]{3,30})')
-    DISCORD_INVITE_RE = re.compile(r'discord\.gg/([A-Za-z0-9_-]+)')
-    SNOWFLAKE_RE = re.compile(r'\b(\d{17,20})\b')
-    ROBLOX_RE = re.compile(r'\b(\d{3,16})\b')
-    BTC_RE = re.compile(r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b')
-    PHONE_RE = re.compile(r'\+?\d[\d\s\-\(\)]{7,15}\d')
-    DOMAIN_RE = re.compile(r'\b([a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)+)\b')
+    """Extract new identifiers from scan output and AI verdicts."""
 
     def __init__(self, config: Config):
         self.config = config
-        self.pivot_log: deque = deque(maxlen=config.hunt.max_pivot_log)
 
     def extract_pivots(self, case: Any, round_num: int) -> List[Dict[str, Any]]:
-        pivots = []
+        """Extract pivot identifiers from hits, evidence, and AI verdicts."""
+        pivots: List[Dict[str, Any]] = []
+
+        # From scan hits
         for hit in case.hits[-200:]:
             text = json.dumps(hit, ensure_ascii=False)
-            pivots.extend(self._extract_from_text(text, f"hit:{hit.get('platform','?')}"))
+            source = f"hit:{hit.get('platform', '?')}"
+            pivots.extend(self._extract_from_text(text, source, round_num))
+
+        # From profile evidence
         for evidence in case.profile_evidence[-100:]:
             text = json.dumps(evidence, ensure_ascii=False)
-            pivots.extend(self._extract_from_text(text, f"evidence:{evidence.get('platform','?')}"))
+            source = f"evidence:{evidence.get('platform', '?')}"
+            pivots.extend(self._extract_from_text(text, source, round_num))
+
+        # From AI verdicts
+        for verdict in case.ai_verdicts[-100:]:
+            action = verdict.get("verdict", "")
+            value = verdict.get("target", "")
+            if not value:
+                continue
+            if action.startswith("queue_"):
+                pivot_type = action.replace("queue_", "")
+                pivots.append({
+                    "round": round_num,
+                    "source": "ai",
+                    "found": value,
+                    "action": action,
+                    "reason": verdict.get("reason", "AI pivot"),
+                    "by": "ai",
+                })
+
+        # Deduplicate
         seen = set()
-        deduped = []
+        deduped: List[Dict[str, Any]] = []
         for p in pivots:
             key = (p.get("action", ""), p.get("value", "").lower())
             if key not in seen:
                 seen.add(key)
                 deduped.append(p)
-        return deduped[: config.hunt.max_pivot_log]
 
-    def _extract_from_text(self, text: str, source: str) -> List[Dict[str, Any]]:
-        pivots = []
-        for match in self.EMAIL_RE.finditer(text):
-            val = match.group(0)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "queue_email", "reason": "regex pivot", "by": "regex"})
-        for match in self.URL_RE.finditer(text):
-            val = match.group(0)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "note", "reason": "url found", "by": "regex"})
-        for match in self.DISCORD_INVITE_RE.finditer(text):
-            val = match.group(0)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "note", "reason": "discord invite", "by": "regex"})
-        for match in self.SNOWFLAKE_RE.finditer(text):
-            val = match.group(1)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "note", "reason": "discord snowflake", "by": "regex"})
-        for match in self.ROBLOX_RE.finditer(text):
-            val = match.group(1)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "note", "reason": "roblox id", "by": "regex"})
-        for match in self.BTC_RE.finditer(text):
-            val = match.group(0)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "note", "reason": "btc address", "by": "regex"})
-        for match in self.PHONE_RE.finditer(text):
-            val = match.group(0)
-            pivots.append({"round": 0, "source": source, "found": val, "action": "queue_phone", "reason": "regex pivot", "by": "regex"})
-        for match in self.DOMAIN_RE.finditer(text):
-            val = match.group(1)
-            if "." in val and len(val) > 4:
-                pivots.append({"round": 0, "source": source, "found": val, "action": "queue_domain", "reason": "regex pivot", "by": "regex"})
-        for match in self.HANDLE_RE.finditer(text):
-            val = match.group(1)
-            if len(val) >= 3:
-                pivots.append({"round": 0, "source": source, "found": val, "action": "queue_username", "reason": "handle pivot", "by": "regex"})
+        return deduped[: self.config.hunt.max_pivot_log]
+
+    def _extract_from_text(
+        self, text: str, source: str, round_num: int
+    ) -> List[Dict[str, Any]]:
+        """Extract all identifier types from a text chunk."""
+        pivots: List[Dict[str, Any]] = []
+
+        for val in extract_emails(text):
+            pivots.append(self._make_pivot(round_num, source, val, "queue_email", "regex pivot"))
+        for val in extract_handles(text):
+            pivots.append(self._make_pivot(round_num, source, val, "queue_username", "handle pivot"))
+        for val in extract_usernames_from_paths(text):
+            pivots.append(self._make_pivot(round_num, source, val, "queue_username", "path pivot"))
+        for val in extract_discord_invites(text):
+            pivots.append(self._make_pivot(round_num, source, val, "note", "discord invite"))
+        for val in extract_discord_snowflakes(text):
+            pivots.append(self._make_pivot(round_num, source, val, "note", "discord snowflake"))
+        for val in extract_roblox_ids(text):
+            pivots.append(self._make_pivot(round_num, source, val, "note", "roblox id"))
+        for val in extract_btc_addresses(text):
+            pivots.append(self._make_pivot(round_num, source, val, "note", "btc address"))
+        for val in extract_phones(text):
+            pivots.append(self._make_pivot(round_num, source, val, "queue_phone", "regex pivot"))
+        for val in extract_domains(text):
+            pivots.append(self._make_pivot(round_num, source, val, "queue_domain", "regex pivot"))
+        for val in extract_urls(text):
+            pivots.append(self._make_pivot(round_num, source, val, "note", "url found"))
+
         return pivots
+
+    @staticmethod
+    def _make_pivot(
+        round_num: int, source: str, value: str, action: str, reason: str
+    ) -> Dict[str, Any]:
+        return {
+            "round": round_num,
+            "source": source,
+            "found": value,
+            "action": action,
+            "reason": reason,
+            "by": "regex",
+        }
+
+    def apply_pivots_to_case(
+        self, case: Any, pivots: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Apply verified pivots to case queues. Returns list of applied pivots."""
+        applied: List[Dict[str, Any]] = []
+        for pivot in pivots:
+            action = pivot.get("action", "")
+            value = pivot.get("value", "")
+            if not value:
+                continue
+
+            if action == "queue_username":
+                if case.add_username(value):
+                    applied.append(pivot)
+            elif action == "queue_email":
+                if case.add_email(value):
+                    applied.append(pivot)
+            elif action == "queue_phone":
+                if value not in case.done_phones and case.can_add_username():
+                    case.done_phones.add(value)
+                    applied.append(pivot)
+            elif action == "queue_domain":
+                if value not in case.done_domains and case.can_add_username():
+                    case.done_domains.add(value)
+                    applied.append(pivot)
+
+        return applied

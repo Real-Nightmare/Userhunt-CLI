@@ -1,5 +1,5 @@
 """
-Core package for USERHUNT CLI.
+Core package for Userhunt CLI.
 """
 from userhunt.core.pivot import PivotEngine
 from userhunt.core.evidence import EvidenceCollector
