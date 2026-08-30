@@ -101,8 +101,20 @@ def create_app() -> web.Application:
 
 def start_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Start the web dashboard server (blocking)."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     app = create_app()
-    web.run_app(app, host=host, port=port, print=None)
+    runner = web.AppRunner(app)
+    loop.run_until_complete(runner.setup())
+    site = web.TCPSite(runner, host, port)
+    loop.run_until_complete(site.start())
+    try:
+        loop.run_forever()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        loop.run_until_complete(runner.cleanup())
+        loop.close()
 
 
 def start_server_thread(host: str = "0.0.0.0", port: int = 8000) -> threading.Thread:
