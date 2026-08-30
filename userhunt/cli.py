@@ -1,6 +1,7 @@
 """
 Userhunt CLI — main entry point and interactive menu.
 Autonomous AI-powered OSINT toolkit with deep hunt engine.
+Live dashboard at http://0.0.0.0:8000
 """
 import os
 import sys
@@ -14,8 +15,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich import box
+from rich.text import Text
 
 from userhunt.config import Config, AIConfig, AIProvider
 from userhunt.case import Case
@@ -27,6 +29,7 @@ from userhunt.core.confidence import ConfidenceEngine
 from userhunt.output.reporter import Reporter
 from userhunt.utils.storage import check_disk, purge_temp_files
 from userhunt.utils.extractors import route_clues
+from userhunt.web.store import store as dashboard
 
 
 console = Console()
@@ -47,8 +50,9 @@ def logo() -> None:
 ║    ╚████╔╝ ██║███████╗   ██║   ██║     ██║  ██║██║    ║
 ║     ╚═══╝  ╚═╝╚══════╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═╝    ║
 ║                                                          ║
-║        Autonomous AI-Powered OSINT Toolkit v2.1          ║
+║        Autonomous AI-Powered OSINT Toolkit v2.3          ║
 ║                    Deep Hunt Engine                       ║
+║          Live Dashboard: http://0.0.0.0:8000             ║
 ╚══════════════════════════════════════════════════════════╝
 [/bold cyan]"""
     console.print(Panel(art, border_style="cyan", padding=(0, 1)))
@@ -58,10 +62,13 @@ def status_bar() -> None:
     ws = config.hunt.workspace
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ai_status = "[green]ON[/green]" if config.ai.enabled else "[red]OFF[/red]"
+    timeout_str = "none" if config.hunt.tool_timeout == 0 else f"{config.hunt.tool_timeout}s"
     console.print(
-        f"[dim]Workspace: {ws} | Time: {ts} | AI Engine: {ai_status} | "
-        f"Model: {config.ai.model if config.ai.enabled else 'N/A'}[/dim]"
+        f"[dim]Workspace: {ws} | Time: {ts} | AI: {ai_status} | "
+        f"Model: {config.ai.model if config.ai.enabled else 'N/A'} | "
+        f"Timeout: {timeout_str}[/dim]"
     )
+    console.print("[dim]Dashboard: http://0.0.0.0:8000 | Upgrade: userhunt upgrade[/dim]")
 
 
 def menu() -> None:
@@ -134,7 +141,6 @@ def ai_settings_menu() -> None:
     console.clear()
     console.print(Panel.fit("[bold cyan]AI SETTINGS — Built-in Free Providers[/bold cyan]", border_style="cyan"))
     
-    # Show built-in free providers
     table = Table(box=box.ROUNDED, show_header=True, expand=True)
     table.add_column("#", style="bold cyan", width=3)
     table.add_column("Provider", style="bold green")
@@ -153,7 +159,6 @@ def ai_settings_menu() -> None:
         table.add_row(num, name, model, tier, card, source)
     console.print(table)
     
-    # Paid / custom options
     console.print("\n[bold yellow]Paid / Custom Options:[/bold yellow]")
     paid_table = Table(box=box.ROUNDED, show_header=True, expand=True)
     paid_table.add_column("#", style="bold cyan", width=3)
@@ -253,7 +258,20 @@ def run_deep_hunt(case: Case) -> None:
     ai_engine = AIEngine(config) if config.ai.enabled else None
 
     start_time = time.time()
+
+    # Initialize dashboard
+    dashboard.reset()
+    dashboard.start_timer()
+    dashboard.set_status("scanning")
+    dashboard.set_identifiers(case.usernames, case.emails, case.names)
+    dashboard.log(
+        f"Deep hunt starting: {len(case.usernames)} usernames, "
+        f"{len(case.emails)} emails, {len(case.names)} names",
+        source="hunt",
+    )
+
     console.print(f"[bold green]>> Userhunt deep hunt starting (rounds 1-{config.hunt.max_rounds})[/bold green]")
+    console.print("[bold green]>> Dashboard: http://0.0.0.0:8000[/bold green]")
 
     for rnd in range(1, config.hunt.max_rounds + 1):
         case.round = rnd
@@ -262,57 +280,80 @@ def run_deep_hunt(case: Case) -> None:
         if ai_engine:
             ai_engine.reset_round()
 
+        dashboard.set_round(rnd, config.hunt.max_rounds)
+        dashboard.log(f"=== ROUND {rnd}/{config.hunt.max_rounds} ===", source="hunt")
+
         console.print(f"[bold cyan]=== ROUND {rnd}/{config.hunt.max_rounds} ===[/bold cyan]")
 
         # ── Username hunt ──
         usernames = [u for u in case.usernames if u not in case.done_usernames]
         if usernames:
+            dashboard.log(f"Scanning {len(usernames)} username(s)...", source="username")
             console.print(f">> deep username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})")
             round_hits = scan_manager.scan_usernames(usernames)
             for hit in round_hits:
-                if not case.can_add_hit():
-                    break
                 case.add_hit(hit)
             for u in usernames:
                 case.done_usernames.add(u)
+            dashboard.log(f"Username scan: {len(round_hits)} hits", source="username")
             console.print(f"   [dim]Username scan: {len(round_hits)} hits[/dim]")
 
         # ── Email hunt ──
         emails = [e for e in case.emails if e not in case.done_emails]
         if emails:
+            dashboard.log(f"Scanning {len(emails)} email(s)...", source="email")
             console.print(f">> deep email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})")
             round_hits = scan_manager.scan_emails(emails)
             for hit in round_hits:
-                if not case.can_add_hit():
-                    break
                 case.add_hit(hit)
             for e in emails:
                 case.done_emails.add(e)
+            dashboard.log(f"Email scan: {len(round_hits)} hits", source="email")
             console.print(f"   [dim]Email scan: {len(round_hits)} hits[/dim]")
 
         # ── Name hunt ──
         names = [n for n in case.names if n not in case.done_names]
         if names:
+            dashboard.log(f"Scanning {len(names)} name(s)...", source="name")
             console.print(f">> deep name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})")
             round_hits = scan_manager.scan_names(names)
             for hit in round_hits:
-                if not case.can_add_hit():
-                    break
                 case.add_hit(hit)
             for n in names:
                 case.done_names.add(n)
+            dashboard.log(f"Name scan: {len(round_hits)} hits", source="name")
             console.print(f"   [dim]Name scan: {len(round_hits)} hits[/dim]")
+
+        # ── Phone hunt (from pivot-extracted phones) ──
+        phones = list(case.done_phones)
+        if phones:
+            dashboard.log(f"Scanning {len(phones)} phone(s)...", source="phone")
+            round_hits = scan_manager.scan_phones(phones)
+            for hit in round_hits:
+                case.add_hit(hit)
+            dashboard.log(f"Phone scan: {len(round_hits)} hits", source="phone")
+
+        # ── Domain hunt (from pivot-extracted domains) ──
+        domains = list(case.done_domains)
+        if domains:
+            dashboard.log(f"Scanning {len(domains)} domain(s)...", source="domain")
+            round_hits = scan_manager.scan_domains(domains)
+            for hit in round_hits:
+                case.add_hit(hit)
+            dashboard.log(f"Domain scan: {len(round_hits)} hits", source="domain")
 
         # ── Clue hunt ──
         if case.clues:
             round_hits = scan_manager.scan_clues(case.clues)
             for hit in round_hits:
-                if not case.can_add_hit():
-                    break
                 case.add_hit(hit)
             console.print(f"   [dim]Clue scan: {len(round_hits)} hits[/dim]")
 
+        # ── Update dashboard identifiers ──
+        dashboard.set_identifiers(case.usernames, case.emails, case.names)
+
         # ── Evidence collection (link visitor) ──
+        dashboard.log("Collecting evidence from hit pages...", source="evidence")
         console.print("   [dim]Collecting evidence from hit pages...[/dim]")
         evidence_collector.visit_links(case.hits, rnd)
 
@@ -321,19 +362,56 @@ def run_deep_hunt(case: Case) -> None:
 
         # ── AI review ──
         if ai_engine:
+            dashboard.log("AI reviewing scan results...", source="ai")
             console.print("   [dim]AI reviewing scan results...[/dim]")
             ai_engine.review_round(case, rnd)
 
         # ── Pivot extraction and queueing ──
         pivots = pivot_engine.extract_pivots(case, rnd)
         applied = pivot_engine.apply_pivots_to_case(case, pivots)
-        case.pivot_log.extend(pivots)
+
+        # Log pivots to dashboard
+        for p in pivots:
+            p["time"] = time.time()
+            dashboard.add_pivot(p)
+
+        # Show applied pivots
+        new_usernames = [p for p in applied if p.get("action") == "queue_username"]
+        new_emails = [p for p in applied if p.get("action") == "queue_email"]
+        new_phones = [p for p in applied if p.get("action") == "queue_phone"]
+        new_domains = [p for p in applied if p.get("action") == "queue_domain"]
+
+        if new_usernames or new_emails or new_phones or new_domains:
+            dashboard.log(
+                f"Pivots applied: {len(new_usernames)} usernames, "
+                f"{len(new_emails)} emails, {len(new_phones)} phones, "
+                f"{len(new_domains)} domains",
+                source="pivot",
+            )
+
+        # Queue new phones/domains for next-round scanning
+        for p in new_phones:
+            val = p.get("found", "")
+            if val and val not in case.done_phones:
+                case.done_phones.add(val)
+        for p in new_domains:
+            val = p.get("found", "")
+            if val and val not in case.done_domains:
+                case.done_domains.add(val)
 
         elapsed = time.time() - start_time
+        dashboard.log(
+            f"Round {rnd} complete. {len(case.hits)} total hits. "
+            f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.",
+            source="hunt",
+        )
         console.print(
             f"[dim]Round {rnd} complete. {len(case.hits)} total hits. "
             f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.[/dim]"
         )
+
+        # Update case save
+        case.save(ws / "data" / "case.json")
 
         if rnd < config.hunt.max_rounds:
             try:
@@ -341,6 +419,10 @@ def run_deep_hunt(case: Case) -> None:
                     break
             except Exception:
                 break
+
+    # ── Mark as done ──
+    dashboard.set_status("done")
+    dashboard.log(f"Deep hunt complete! {len(case.hits)} total hits.", source="hunt")
 
     # ── Purge temp files ──
     purge_temp_files(config.hunt.workspace)
@@ -355,6 +437,7 @@ def run_deep_hunt(case: Case) -> None:
     console.print(f"[bold green]Hunt complete. {len(case.hits)} hits.[/bold green]")
     console.print(f"  JSON: {json_path}")
     console.print(f"  PDF:  {pdf_path}")
+    console.print("[bold green]Dashboard still running at http://0.0.0.0:8000[/bold green]")
 
 
 # ── Rebuild profile ────────────────────────────────────────────────
@@ -501,12 +584,28 @@ def _auto_hunt_prompt(case: Case, save_path: Path) -> None:
     )
     console.print("[dim]  Sherlock, Maigret, Blackbird, Nexfil, WhatsMyName, direct probes,[/dim]")
     console.print("[dim]  Holehe, Gravatar, emailrep, phonenumbers, phoneinfoga, DNS, WHOIS...[/dim]")
+    console.print("[dim]  Dashboard: http://0.0.0.0:8000[/dim]")
     try:
         if Confirm.ask("\n[bold green]Start deep scan now?[/bold green]", default=True):
             case.save(save_path)
             run_deep_hunt(case)
     except Exception:
         pass
+
+
+# ── Web dashboard startup ──────────────────────────────────────────
+
+def _start_dashboard() -> None:
+    """Start the live web dashboard in a background thread."""
+    try:
+        from userhunt.web.server import start_server_thread
+        t = start_server_thread(host="0.0.0.0", port=8000)
+        dashboard.log("Dashboard started at http://0.0.0.0:8000", source="system")
+        console.print("[green]Dashboard running at http://0.0.0.0:8000[/green]")
+        return t
+    except Exception as e:
+        console.print(f"[yellow]Dashboard failed to start: {e}[/yellow]")
+        return None
 
 
 # ── Click entry point ──────────────────────────────────────────────
@@ -516,19 +615,37 @@ def _auto_hunt_prompt(case: Case, save_path: Path) -> None:
 @click.option("-u", "usernames", multiple=True, help="Usernames to hunt (can repeat)")
 @click.option("-e", "emails", multiple=True, help="Emails to hunt (can repeat)")
 @click.option("-n", "names", multiple=True, help="Full names to hunt (can repeat)")
+@click.option("--timeout", "tool_timeout", type=int, default=None,
+              help="Tool timeout in seconds (0=no timeout, default=0)")
+@click.option("--no-dashboard", is_flag=True, help="Disable web dashboard")
 @click.pass_context
-def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names: tuple) -> None:
+def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names: tuple,
+         tool_timeout: int | None, no_dashboard: bool) -> None:
     """Userhunt CLI — Autonomous AI-powered OSINT toolkit.
 
     Default action is deep scan. Use --deep with -u/-e/-n flags for
     non-interactive mode, or run without flags for the interactive menu.
+    Dashboard: http://0.0.0.0:8000
+
+    Tools run with no timeout by default (0 = wait forever).
+    Use --timeout N to limit each tool to N seconds.
     """
     if ctx.invoked_subcommand is not None:
         return
 
+    config.load()
+
+    # Apply CLI timeout override
+    if tool_timeout is not None:
+        config.hunt.tool_timeout = tool_timeout
+        config.save_hunt()
+
+    # Start dashboard (unless disabled)
+    if not no_dashboard:
+        _start_dashboard()
+
     # Non-interactive deep scan mode
     if deep or usernames or emails or names:
-        config.load()
         case = Case(
             max_hits=config.hunt.max_hits,
             max_pivot_log=config.hunt.max_pivot_log,
@@ -556,7 +673,9 @@ def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names:
             case.names.append(n)
 
         if not case.is_empty():
+            timeout_str = "none" if config.hunt.tool_timeout == 0 else f"{config.hunt.tool_timeout}s"
             console.print(f"[bold green]Starting deep scan with {len(case.usernames)} usernames, {len(case.emails)} emails, {len(case.names)} names[/bold green]")
+            console.print(f"[dim]Tool timeout: {timeout_str} | Dashboard: http://0.0.0.0:8000[/dim]")
             run_deep_hunt(case)
             case.save(save_path)
         else:
@@ -564,6 +683,86 @@ def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names:
         return
 
     run_interactive()
+
+
+# ── Upgrade command ────────────────────────────────────────────────
+
+@main.command()
+def upgrade() -> None:
+    """Upgrade Userhunt CLI to the latest version from GitHub."""
+    from userhunt import __version__
+    console.print(f"[cyan]Current version: {__version__}[/cyan]")
+    console.print("[dim]Checking for updates...[/dim]")
+
+    try:
+        import subprocess
+        # Fetch latest from origin
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=10,
+        )
+        repo_url = result.stdout.strip()
+        console.print(f"[dim]Repository: {repo_url}[/dim]")
+
+        # Fetch and check for new commits
+        result = subprocess.run(
+            ["git", "fetch", "origin"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]Fetch failed: {result.stderr}[/red]")
+            return
+
+        # Check if we're behind
+        result = subprocess.run(
+            ["git", "rev-list", "HEAD..origin/main", "--count"],
+            capture_output=True, text=True, timeout=10,
+        )
+        behind = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
+
+        if behind == 0:
+            console.print("[green]Already up to date![/green]")
+            return
+
+        console.print(f"[yellow]{behind} new commit(s) available.[/yellow]")
+        if not Confirm.ask("Pull update now?", default=True):
+            return
+
+        # Pull
+        with console.status("[bold green]Pulling updates..."):
+            result = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                capture_output=True, text=True, timeout=60,
+            )
+
+        if result.returncode == 0:
+            console.print("[green]Pulled successfully![/green]")
+
+            # Reinstall if needed
+            if Confirm.ask("Reinstall package?", default=True):
+                with console.status("[bold green]Reinstalling..."):
+                    result = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-e", ".", "--quiet"],
+                        capture_output=True, text=True, timeout=120,
+                    )
+                if result.returncode == 0:
+                    console.print("[green]Reinstalled successfully![/green]")
+                else:
+                    console.print(f"[yellow]Reinstall warning: {result.stderr[:200]}[/yellow]")
+
+            # Show new version
+            result = subprocess.run(
+                [sys.executable, "-c", "from userhunt import __version__; print(__version__)"],
+                capture_output=True, text=True, timeout=10,
+            )
+            new_ver = result.stdout.strip() or "unknown"
+            console.print(f"[bold green]Updated to v{new_ver}![/bold green]")
+        else:
+            console.print(f"[red]Pull failed: {result.stderr}[/red]")
+
+    except Exception as e:
+        console.print(f"[red]Upgrade failed: {e}[/red]")
+        console.print("[dim]Manual upgrade: git pull origin main && pip install -e .[/dim]")
 
 
 def run_interactive() -> None:
