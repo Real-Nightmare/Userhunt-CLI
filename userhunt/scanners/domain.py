@@ -12,7 +12,7 @@ import dns.resolver
 
 from userhunt.config import Config
 from userhunt.scanners.base import BaseScanner
-from userhunt.utils.runner import run_tool_simple
+from userhunt.utils.runner import run_tool_simple, run_tool_with_fallback
 from userhunt.web.store import store
 
 
@@ -184,11 +184,15 @@ class DomainScanner(BaseScanner):
         if not path.exists():
             return hits
         store.log(f"Running Sublist3r (MAX - 100 threads) for: {domain}", source="Sublist3r")
-        stdout, stderr, rc = run_tool_simple(
-            [sys.executable, "sublist3r.py", "-d", domain, "-t", "100", "-o", "-"],
+        stdout, stderr, rc = run_tool_with_fallback(
+            tool_name="Sublist3r",
             cwd=str(path),
             timeout=self.config.hunt.tool_timeout,
-            tool_name="Sublist3r",
+            primary=[sys.executable, "sublist3r.py", "-d", domain, "-t", "100", "-o", "-"],
+            fallbacks=[
+                [sys.executable, "-m", "Sublist3r", "-d", domain, "-t", "100", "-o", "-"],
+                [sys.executable, "Sublist3r/sublist3r.py", "-d", domain, "-t", "100", "-o", "-"],
+            ],
         )
         subs = [l.strip() for l in stdout.splitlines() if l.strip() and "." in l]
         if subs:
@@ -213,11 +217,15 @@ class DomainScanner(BaseScanner):
         if not path.exists():
             return hits
         store.log(f"Running FinalRecon (MAX - full scan) for: {domain}", source="FinalRecon")
-        stdout, stderr, rc = run_tool_simple(
-            [sys.executable, "finalrecon.py", "--full", "--url", f"http://{domain}"],
+        stdout, stderr, rc = run_tool_with_fallback(
+            tool_name="FinalRecon",
             cwd=str(path),
             timeout=self.config.hunt.tool_timeout,
-            tool_name="FinalRecon",
+            primary=[sys.executable, "finalrecon.py", "--full", "--url", f"http://{domain}"],
+            fallbacks=[
+                [sys.executable, "-m", "finalrecon", "--full", "--url", f"http://{domain}"],
+                [sys.executable, "finalrecon/finalrecon.py", "--full", "--url", f"http://{domain}"],
+            ],
         )
         if stdout.strip():
             hit = self._make_hit(
@@ -246,13 +254,18 @@ class DomainScanner(BaseScanner):
         store.log(f"Running Waymore (MAX - mode B, unlimited) for: {domain}", source="waymore")
         out_file = self.config.hunt.workspace / "data" / f"waymore_{domain}.txt"
         out_file.parent.mkdir(parents=True, exist_ok=True)
-        stdout, stderr, rc = run_tool_simple(
-            [sys.executable, "waymore.py", "-i", domain,
-             "-mode", "B", "-l", "0",
-             "-oU", str(out_file)],
+        stdout, stderr, rc = run_tool_with_fallback(
+            tool_name="waymore",
             cwd=str(path),
             timeout=self.config.hunt.tool_timeout,
-            tool_name="waymore",
+            primary=[sys.executable, "waymore.py", "-i", domain,
+                     "-mode", "B", "-l", "0", "-oU", str(out_file)],
+            fallbacks=[
+                [sys.executable, "-m", "waymore", "-i", domain,
+                 "-mode", "B", "-l", "0", "-oU", str(out_file)],
+                [sys.executable, "waymore/waymore.py", "-i", domain,
+                 "-mode", "B", "-l", "0", "-oU", str(out_file)],
+            ],
         )
         urls = []
         if out_file.exists():
@@ -287,11 +300,15 @@ class DomainScanner(BaseScanner):
         if not path.exists():
             return hits
         store.log(f"Running theHarvester (MAX - all sources, no limit) for: {domain}", source="theHarvester")
-        stdout, stderr, rc = run_tool_simple(
-            [sys.executable, "theHarvester.py", "-d", domain, "-b", "all", "--limit", "0"],
+        stdout, stderr, rc = run_tool_with_fallback(
+            tool_name="theHarvester",
             cwd=str(path),
             timeout=self.config.hunt.tool_timeout,
-            tool_name="theHarvester",
+            primary=[sys.executable, "theHarvester.py", "-d", domain, "-b", "all", "--limit", "0"],
+            fallbacks=[
+                [sys.executable, "-m", "theHarvester", "-d", domain, "-b", "all", "--limit", "0"],
+                [sys.executable, "theHarvester/theHarvester.py", "-d", domain, "-b", "all", "--limit", "0"],
+            ],
         )
         emails = [l.strip() for l in stdout.splitlines()
                    if "@" in l and domain in l]

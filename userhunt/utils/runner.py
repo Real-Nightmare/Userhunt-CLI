@@ -180,3 +180,48 @@ def run_tool_simple(
 ) -> tuple[str, str, int]:
     """Simplified version — just returns (stdout, stderr, returncode)."""
     return run_tool(cmd, cwd=cwd, timeout=timeout, tool_name=tool_name)
+
+
+def run_tool_with_fallback(
+    tool_name: str,
+    cwd: str = None,
+    timeout: int = 300,
+    # Primary command (e.g., ['python', 'sherlock.py', 'username'])
+    primary: list = None,
+    # Fallback commands (e.g., [['python', '-m', 'sherlock_project.sherlock', 'username']])
+    fallbacks: list = None,
+) -> tuple[str, str, int]:
+    """
+    Run a tool with automatic fallback commands.
+    Tries primary first, then each fallback until one succeeds.
+    Returns the output of the first successful run.
+    """
+    all_commands = []
+    if primary:
+        all_commands.append(primary)
+    if fallbacks:
+        all_commands.extend(fallbacks)
+
+    if not all_commands:
+        return ("", "No commands specified", -1)
+
+    for i, cmd in enumerate(all_commands):
+        stdout, stderr, rc = run_tool(
+            cmd, cwd=cwd, timeout=timeout, tool_name=tool_name,
+        )
+        # If command ran (even with non-zero exit), return its output
+        # Only try fallback if command wasn't found (-1)
+        if rc != -1:
+            if i > 0:
+                try:
+                    from userhunt.web.store import store
+                    store.log(
+                        f"{tool_name}: fallback command worked: {' '.join(cmd[:3])}...",
+                        source=tool_name,
+                    )
+                except Exception:
+                    pass
+            return (stdout, stderr, rc)
+
+    # All commands failed
+    return ("", f"All command variants failed for {tool_name}", -1)

@@ -14,7 +14,7 @@ import requests
 
 from userhunt.config import Config
 from userhunt.scanners.base import BaseScanner
-from userhunt.utils.runner import run_tool_simple
+from userhunt.utils.runner import run_tool_simple, run_tool_with_fallback
 from userhunt.web.store import store
 
 
@@ -226,12 +226,10 @@ class UsernameScanner(BaseScanner):
 
     def _run_sherlock(self, usernames: List[str]) -> List[Dict[str, Any]]:
         """
-        SHERLOCK — MAXIMUM:
-        --print-found       only show found results
-        --timeout 60        60s per-request (default 60, explicit for clarity)
-        --nsfw              INCLUDE NSFW sites (way more results)
-        --ignore-exclusions ignore upstream site exclusions (more results)
-        --local             use local data.json (faster, no network fetch)
+        SHERLOCK — MAXIMUM with fallback commands:
+        1. python -m sherlock_project.sherlock (module)
+        2. python sherlock/sherlock.py (direct script)
+        --print-found --timeout 60 --nsfw --ignore-exclusions --local
         """
         hits: List[Dict[str, Any]] = []
         sherlock_path = self.config.hunt.workspace / "tools" / "sherlock"
@@ -240,17 +238,17 @@ class UsernameScanner(BaseScanner):
             return hits
         for username in usernames[:10]:
             store.log(f"Running Sherlock (MAX) for: {username}", source="sherlock")
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "-m", "sherlock_project.sherlock",
-                 "--print-found",
-                 "--timeout", "60",
-                 "--nsfw",
-                 "--ignore-exclusions",
-                 "--local",
-                 username],
+            args = ["--print-found", "--timeout", "60", "--nsfw",
+                    "--ignore-exclusions", "--local", username]
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="sherlock",
                 cwd=str(sherlock_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="sherlock",
+                primary=[sys.executable, "-m", "sherlock_project.sherlock"] + args,
+                fallbacks=[
+                    [sys.executable, "sherlock_project/sherlock.py"] + args,
+                    [sys.executable, "-m", "sherlock"] + args,
+                ],
             )
             for line in stdout.splitlines():
                 if ":" in line and "https://" in line:
@@ -271,14 +269,11 @@ class UsernameScanner(BaseScanner):
 
     def _run_maigret(self, usernames: List[str]) -> List[Dict[str, Any]]:
         """
-        MAIGRET — MAXIMUM (searches FULL database, not just top sites):
-        --timeout 60         60s per-request (default 30, doubled for slow sites)
-        -n 500               500 concurrent connections (default 100)
-        --enrich             fetch secondary API/JSON endpoints for richer data
-        --permute            generate username permutations automatically
-        --with-domains       also check domain-style results
-        NO --top-sites       means SEARCH ALL SITES (removing the limit!)
-        --json ndjson        structured output for parsing
+        MAIGRET — MAXIMUM with fallback commands:
+        1. python -m maigret (module)
+        2. python maigret/__main__.py (direct script)
+        --timeout 60 -n 500 --enrich --permute --with-domains
+        NO --top-sites = SEARCH ALL SITES
         """
         hits: List[Dict[str, Any]] = []
         maigret_path = self.config.hunt.workspace / "tools" / "maigret"
@@ -289,19 +284,17 @@ class UsernameScanner(BaseScanner):
             store.log(f"Running Maigret (MAX - ALL SITES) for: {username}", source="maigret")
             out_file = self.config.hunt.workspace / "data" / f"maigret_{username}.json"
             out_file.parent.mkdir(parents=True, exist_ok=True)
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "-m", "maigret",
-                 "--timeout", "60",
-                 "-n", "500",
-                 "--enrich",
-                 "--permute",
-                 "--with-domains",
-                 "--json", "ndjson",
-                 "-o", str(out_file),
-                 username],
+            args = ["--timeout", "60", "-n", "500", "--enrich", "--permute",
+                    "--with-domains", "--json", "ndjson", "-o", str(out_file), username]
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="maigret",
                 cwd=str(maigret_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="maigret",
+                primary=[sys.executable, "-m", "maigret"] + args,
+                fallbacks=[
+                    [sys.executable, "maigret/__main__.py"] + args,
+                    [sys.executable, "-m", "maigret.__main__"] + args,
+                ],
             )
             # Parse ndjson output file
             if out_file.exists():
@@ -353,10 +346,10 @@ class UsernameScanner(BaseScanner):
 
     def _run_nexfil(self, usernames: List[str]) -> List[Dict[str, Any]]:
         """
-        NEXFIL — MAXIMUM:
-        -u USERNAME    target username
-        -t 30          30s timeout per request (default 10, tripled for slow sites)
-        Checks 350+ platforms.
+        NEXFIL — MAXIMUM with fallback commands:
+        1. python nexfil.py (direct script)
+        2. python -m nexfil (module)
+        -u USERNAME -t 30
         """
         hits: List[Dict[str, Any]] = []
         nexfil_path = self.config.hunt.workspace / "tools" / "nexfil"
@@ -365,11 +358,16 @@ class UsernameScanner(BaseScanner):
             return hits
         for username in usernames[:5]:
             store.log(f"Running Nexfil (MAX) for: {username}", source="nexfil")
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "nexfil.py", "-u", username, "-t", "30"],
+            args = ["-u", username, "-t", "30"]
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="nexfil",
                 cwd=str(nexfil_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="nexfil",
+                primary=[sys.executable, "nexfil.py"] + args,
+                fallbacks=[
+                    [sys.executable, "-m", "nexfil"] + args,
+                    [sys.executable, "nexfil/nexfil.py"] + args,
+                ],
             )
             for line in stdout.splitlines():
                 if "[+]" in line or "https://" in line:
@@ -388,10 +386,10 @@ class UsernameScanner(BaseScanner):
 
     def _run_blackbird(self, usernames: List[str]) -> List[Dict[str, Any]]:
         """
-        BLACKBIRD — MAXIMUM:
-        -u USERNAME    target username
-        --json         structured JSON output for parsing
-        Checks 400+ platforms.
+        BLACKBIRD — MAXIMUM with fallback commands:
+        1. python blackbird.py (direct script)
+        2. python -m blackbird (module)
+        -u USERNAME --json
         """
         hits: List[Dict[str, Any]] = []
         bb_path = self.config.hunt.workspace / "tools" / "blackbird"
@@ -400,11 +398,16 @@ class UsernameScanner(BaseScanner):
             return hits
         for username in usernames[:5]:
             store.log(f"Running Blackbird (MAX) for: {username}", source="blackbird")
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "blackbird.py", "-u", username, "--json"],
+            args = ["-u", username, "--json"]
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="blackbird",
                 cwd=str(bb_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="blackbird",
+                primary=[sys.executable, "blackbird.py"] + args,
+                fallbacks=[
+                    [sys.executable, "-m", "blackbird"] + args,
+                    [sys.executable, "blackbird/blackbird.py"] + args,
+                ],
             )
             for line in stdout.splitlines():
                 try:

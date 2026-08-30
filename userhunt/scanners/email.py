@@ -12,7 +12,7 @@ import requests
 
 from userhunt.config import Config
 from userhunt.scanners.base import BaseScanner
-from userhunt.utils.runner import run_tool_simple
+from userhunt.utils.runner import run_tool_simple, run_tool_with_fallback
 from userhunt.web.store import store
 
 
@@ -111,11 +111,15 @@ class EmailScanner(BaseScanner):
             return hits
         for email in emails[:10]:
             store.log(f"Running Holehe (MAX - 120+ modules) for: {email}", source="holehe")
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "-m", "holehe", email],
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="holehe",
                 cwd=str(holehe_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="holehe",
+                primary=[sys.executable, "-m", "holehe", email],
+                fallbacks=[
+                    [sys.executable, "holehe/holehe.py", email],
+                    [sys.executable, "holehe/__main__.py", email],
+                ],
             )
             for line in stdout.splitlines():
                 if "[+]" in line:
@@ -144,11 +148,15 @@ class EmailScanner(BaseScanner):
             return hits
         for email in emails[:5]:
             store.log(f"Running Blackbird email (MAX - 400+ sites) for: {email}", source="blackbird")
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "blackbird.py", "-e", email, "--json"],
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="blackbird",
                 cwd=str(bb_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="blackbird",
+                primary=[sys.executable, "blackbird.py", "-e", email, "--json"],
+                fallbacks=[
+                    [sys.executable, "-m", "blackbird", "-e", email, "--json"],
+                    [sys.executable, "blackbird/blackbird.py", "-e", email, "--json"],
+                ],
             )
             for line in stdout.splitlines():
                 try:
@@ -207,11 +215,15 @@ class EmailScanner(BaseScanner):
             return hits
         for email in emails[:3]:
             store.log(f"Running email2phonenumber (MAX) for: {email}", source="email2phonenumber")
-            stdout, stderr, rc = run_tool_simple(
-                [sys.executable, "email2phonenumber.py", "scrape", "-e", email],
+            stdout, stderr, rc = run_tool_with_fallback(
+                tool_name="email2phonenumber",
                 cwd=str(e2p_path),
                 timeout=self.config.hunt.tool_timeout,
-                tool_name="email2phonenumber",
+                primary=[sys.executable, "email2phonenumber.py", "scrape", "-e", email],
+                fallbacks=[
+                    [sys.executable, "-m", "email2phonenumber", "scrape", "-e", email],
+                    [sys.executable, "email2phonenumber/email2phonenumber.py", "scrape", "-e", email],
+                ],
             )
             if stdout.strip():
                 hit = self._make_hit(
