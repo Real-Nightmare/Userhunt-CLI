@@ -11,6 +11,7 @@ import requests
 
 from userhunt.config import Config
 from userhunt.scanners.base import BaseScanner
+from userhunt.web.store import store
 
 
 class NameScanner(BaseScanner):
@@ -179,6 +180,7 @@ class NameScanner(BaseScanner):
     def scan_names(self, names: List[str]) -> List[Dict[str, Any]]:
         """Scan a list of full names."""
         all_hits: List[Dict[str, Any]] = []
+        store.log(f"Name scan: {len(names)} name(s)", source="name_scanner")
         for full_name in names[:50]:
             # Generate username permutations (returned as hits)
             perms = self._username_permutations(full_name)
@@ -219,4 +221,10 @@ class NameScanner(BaseScanner):
         return []
 
     def scan_emails(self, emails: List[str]) -> List[Dict[str, Any]]:
+        return []
+
+    def scan_phones(self, phones: List[str]) -> List[Dict[str, Any]]:
+        return []
+
+    def scan_domains(self, domains: List[str]) -> List[Dict[str, Any]]:
         return []

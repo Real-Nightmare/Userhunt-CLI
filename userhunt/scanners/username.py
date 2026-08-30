@@ -1,8 +1,9 @@
 """
 Username scanner — Sherlock, Maigret, Nexfil, Blackbird, WhatsMyName, direct probers.
-Includes keyless APIs and GitHub commit email harvesting.
+ALL tools configured to MAXIMUM power — full database, no limits.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,8 @@ import requests
 
 from userhunt.config import Config
 from userhunt.scanners.base import BaseScanner
+from userhunt.utils.runner import run_tool_simple
+from userhunt.web.store import store
 
 
 # Platforms that count as HIGH confidence
@@ -26,7 +29,7 @@ class UsernameScanner(BaseScanner):
     def __init__(self, config: Config):
         super().__init__(config)
         self.name = "username_scanner"
-        self.description = "Username enumeration across 500+ sites (Sherlock, Maigret, Nexfil, Blackbird, WMN, direct probes)"
+        self.description = "Username enumeration across ALL sites (Sherlock, Maigret, Nexfil, Blackbird, WMN, direct probes) — MAXIMUM power"
         self.status = "CORE"
         self.wmn_data_path = (
             config.hunt.workspace / "tools" / "WhatsMyName" / "wmn-data.json"
@@ -55,7 +58,7 @@ class UsernameScanner(BaseScanner):
                 self._wmn_sites = []
         return self._wmn_sites
 
-    # ── WhatsMyName runner ──────────────────────────────────────────
+    # ── WhatsMyName runner (ALL sites, max workers) ─────────────────
 
     def _probe_wmn_site(self, site: dict, username: str) -> Dict[str, Any]:
         url_template = site.get("url", "").replace("{account}", username)
@@ -91,7 +94,7 @@ class UsernameScanner(BaseScanner):
             pass
         return {}
 
-    # ── Direct platform probers ─────────────────────────────────────
+    # ── Direct platform probers (ALL platforms) ─────────────────────
 
     def _direct_probers(self, username: str) -> List[Dict[str, Any]]:
         hits: List[Dict[str, Any]] = []
@@ -117,6 +120,26 @@ class UsernameScanner(BaseScanner):
             ("X", f"https://x.com/{username}", lambda r: r.status_code == 200),
             ("Spotify", f"https://open.spotify.com/user/{username}", lambda r: r.status_code == 200),
             ("Roblox", f"https://www.roblox.com/users/profile?username={username}", lambda r: r.status_code == 200),
+            ("DeviantArt", f"https://www.deviantart.com/{username}", lambda r: r.status_code == 200),
+            ("Flickr", f"https://www.flickr.com/people/{username}/", lambda r: r.status_code == 200),
+            ("Gravatar", f"https://en.gravatar.com/{username}", lambda r: r.status_code == 200),
+            ("Medium", f"https://medium.com/@{username}", lambda r: r.status_code == 200),
+            ("Patreon", f"https://www.patreon.com/{username}", lambda r: r.status_code == 200),
+            ("SoundCloud", f"https://soundcloud.com/{username}", lambda r: r.status_code == 200),
+            ("Substack", f"https://{username}.substack.com", lambda r: r.status_code == 200),
+            ("Vimeo", f"https://vimeo.com/{username}", lambda r: r.status_code == 200),
+            ("GitBook", f"https://{username}.gitbook.io", lambda r: r.status_code == 200),
+            ("npm", f"https://www.npmjs.com/~{username}", lambda r: r.status_code == 200),
+            ("PyPI", f"https://pypi.org/user/{username}/", lambda r: r.status_code == 200),
+            ("DockerHub", f"https://hub.docker.com/u/{username}", lambda r: r.status_code == 200),
+            ("Keybase", f"https://keybase.io/{username}", lambda r: r.status_code == 200),
+            ("About.me", f"https://about.me/{username}", lambda r: r.status_code == 200),
+            ("Linktree", f"https://linktr.ee/{username}", lambda r: r.status_code == 200),
+            ("Replit", f"https://replit.com/@{username}", lambda r: r.status_code == 200),
+            ("HackerRank", f"https://www.hackerrank.com/{username}", lambda r: r.status_code == 200),
+            ("LeetCode", f"https://leetcode.com/{username}", lambda r: r.status_code == 200),
+            ("Bitbucket", f"https://bitbucket.org/{username}/", lambda r: r.status_code == 200),
+            ("Gitea", f"https://gitea.com/{username}", lambda r: r.status_code == 200),
         ]
         headers = {"User-Agent": "Mozilla/5.0"}
         for platform, url, check in probers:
@@ -124,10 +147,12 @@ class UsernameScanner(BaseScanner):
                 resp = requests.get(url, timeout=15, headers=headers, allow_redirects=True)
                 if check(resp):
                     conf = "HIGH" if platform.lower() in HIGH_PLATFORMS else "MEDIUM"
-                    hits.append(self._make_hit(
+                    hit = self._make_hit(
                         platform=platform, url=url, confidence=conf,
                         status_code=resp.status_code,
-                    ))
+                    )
+                    hits.append(hit)
+                    store.add_hit(hit)
             except Exception:
                 pass
         return hits
@@ -153,13 +178,15 @@ class UsernameScanner(BaseScanner):
                         if email and email.endswith("@users.noreply.github.com") is False:
                             emails_found.add(email)
                 for email in emails_found:
-                    hits.append(self._make_hit(
+                    hit = self._make_hit(
                         platform="github_commit",
                         url=f"github_events:{username}",
                         confidence="MEDIUM",
                         emails=[email],
                         data={"username": username},
-                    ))
+                    )
+                    hits.append(hit)
+                    store.add_hit(hit)
         except Exception:
             pass
         return hits
@@ -182,68 +209,103 @@ class UsernameScanner(BaseScanner):
                 for user in users:
                     uid = user.get("id")
                     if uid:
-                        hits.append(self._make_hit(
+                        hit = self._make_hit(
                             platform="roblox",
                             url=f"https://www.roblox.com/users/{uid}/profile",
                             confidence="HIGH",
                             display_name=user.get("displayName", ""),
                             data={"roblox_id": uid, "username": username},
-                        ))
+                        )
+                        hits.append(hit)
+                        store.add_hit(hit)
         except Exception:
             pass
         return hits
 
-    # ── Tool runners (subprocess) ───────────────────────────────────
+    # ── Tool runners — ALL AT MAXIMUM POWER ─────────────────────────
 
     def _run_sherlock(self, usernames: List[str]) -> List[Dict[str, Any]]:
-        """Run Sherlock: sherlock username --print-found --timeout 6"""
+        """
+        SHERLOCK — MAXIMUM:
+        --print-found       only show found results
+        --timeout 60        60s per-request (default 60, explicit for clarity)
+        --nsfw              INCLUDE NSFW sites (way more results)
+        --ignore-exclusions ignore upstream site exclusions (more results)
+        --local             use local data.json (faster, no network fetch)
+        """
         hits: List[Dict[str, Any]] = []
         sherlock_path = self.config.hunt.workspace / "tools" / "sherlock"
         if not sherlock_path.exists():
+            store.log("Sherlock not found — skipping", level="warn", source="sherlock")
             return hits
         for username in usernames[:10]:
-            try:
-                # Sherlock CLI: sherlock username --print-found
-                result = subprocess.run(
-                    [sys.executable, "-m", "sherlock_project.sherlock",
-                     "--print-found", "--timeout", "6", username],
-                    capture_output=True, text=True, timeout=120,
-                    cwd=str(sherlock_path),
-                )
-                for line in result.stdout.splitlines():
-                    # Sherlock output format: "Platform: https://url"
-                    if ":" in line and "https://" in line:
-                        parts = line.split(":", 1)
-                        platform = parts[0].strip()
-                        url = parts[1].strip()
-                        if url.startswith("http"):
-                            hits.append(self._make_hit(
-                                platform=platform, url=url,
-                                confidence=self._confidence(platform),
-                            ))
-            except Exception:
-                pass
+            store.log(f"Running Sherlock (MAX) for: {username}", source="sherlock")
+            stdout, stderr, rc = run_tool_simple(
+                [sys.executable, "-m", "sherlock_project.sherlock",
+                 "--print-found",
+                 "--timeout", "60",
+                 "--nsfw",
+                 "--ignore-exclusions",
+                 "--local",
+                 username],
+                cwd=str(sherlock_path),
+                timeout=self.config.hunt.tool_timeout,
+                tool_name="sherlock",
+            )
+            for line in stdout.splitlines():
+                if ":" in line and "https://" in line:
+                    parts = line.split(":", 1)
+                    platform = parts[0].strip()
+                    url = parts[1].strip()
+                    if url.startswith("http"):
+                        hit = self._make_hit(
+                            platform=platform, url=url,
+                            confidence=self._confidence(platform),
+                        )
+                        hits.append(hit)
+                        store.add_hit(hit)
+            if stderr.strip():
+                for line in stderr.splitlines()[:20]:
+                    store.tool_log("sherlock", line, direction="stderr")
         return hits
 
     def _run_maigret(self, usernames: List[str]) -> List[Dict[str, Any]]:
-        """Run Maigret: maigret username --timeout 30 --top-sites 500 --json ndjson"""
+        """
+        MAIGRET — MAXIMUM (searches FULL database, not just top sites):
+        --timeout 60         60s per-request (default 30, doubled for slow sites)
+        -n 500               500 concurrent connections (default 100)
+        --enrich             fetch secondary API/JSON endpoints for richer data
+        --permute            generate username permutations automatically
+        --with-domains       also check domain-style results
+        NO --top-sites       means SEARCH ALL SITES (removing the limit!)
+        --json ndjson        structured output for parsing
+        """
         hits: List[Dict[str, Any]] = []
         maigret_path = self.config.hunt.workspace / "tools" / "maigret"
         if not maigret_path.exists():
+            store.log("Maigret not found — skipping", level="warn", source="maigret")
             return hits
         for username in usernames[:5]:
-            try:
-                # Maigret CLI: maigret username --timeout 30 --top-sites 500 --json ndjson
-                out_file = self.config.hunt.workspace / "data" / f"maigret_{username}.json"
-                out_file.parent.mkdir(parents=True, exist_ok=True)
-                result = subprocess.run(
-                    [sys.executable, "-m", "maigret",
-                     "--timeout", "30", "--top-sites", "500",
-                     "--json", "ndjson", "-o", str(out_file), username],
-                    capture_output=True, text=True, timeout=300,
-                    cwd=str(maigret_path),
-                )
-                if out_file.exists():
+            store.log(f"Running Maigret (MAX - ALL SITES) for: {username}", source="maigret")
+            out_file = self.config.hunt.workspace / "data" / f"maigret_{username}.json"
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            stdout, stderr, rc = run_tool_simple(
+                [sys.executable, "-m", "maigret",
+                 "--timeout", "60",
+                 "-n", "500",
+                 "--enrich",
+                 "--permute",
+                 "--with-domains",
+                 "--json", "ndjson",
+                 "-o", str(out_file),
+                 username],
+                cwd=str(maigret_path),
+                timeout=self.config.hunt.tool_timeout,
+                tool_name="maigret",
+            )
+            # Parse ndjson output file
+            if out_file.exists():
+                try:
                     with open(out_file, "r") as f:
                         for line in f:
                             line = line.strip()
@@ -256,73 +318,119 @@ class UsernameScanner(BaseScanner):
                                     site = item.get("site", "maigret")
                                     status = item.get("status", "")
                                     if status in ("Claimed", "Found", "Exists"):
-                                        hits.append(self._make_hit(
+                                        hit = self._make_hit(
                                             platform=site, url=url,
                                             confidence=self._confidence(site),
-                                        ))
+                                        )
+                                        hits.append(hit)
+                                        store.add_hit(hit)
                             except json.JSONDecodeError:
                                 pass
-                    out_file.unlink(missing_ok=True)
-            except Exception:
-                pass
+                except Exception:
+                    pass
+                out_file.unlink(missing_ok=True)
+            # Also parse stdout for hits
+            for line in stdout.splitlines():
+                try:
+                    item = json.loads(line)
+                    url = item.get("url", "")
+                    if url:
+                        site = item.get("site", "maigret")
+                        status = item.get("status", "")
+                        if status in ("Claimed", "Found", "Exists"):
+                            hit = self._make_hit(
+                                platform=site, url=url,
+                                confidence=self._confidence(site),
+                            )
+                            hits.append(hit)
+                            store.add_hit(hit)
+                except json.JSONDecodeError:
+                    pass
+            if stderr.strip():
+                for line in stderr.splitlines()[:20]:
+                    store.tool_log("maigret", line, direction="stderr")
         return hits
 
     def _run_nexfil(self, usernames: List[str]) -> List[Dict[str, Any]]:
-        """Run Nexfil: nexfil -u username"""
+        """
+        NEXFIL — MAXIMUM:
+        -u USERNAME    target username
+        -t 30          30s timeout per request (default 10, tripled for slow sites)
+        Checks 350+ platforms.
+        """
         hits: List[Dict[str, Any]] = []
         nexfil_path = self.config.hunt.workspace / "tools" / "nexfil"
         if not nexfil_path.exists():
+            store.log("Nexfil not found — skipping", level="warn", source="nexfil")
             return hits
         for username in usernames[:5]:
-            try:
-                # Nexfil CLI: nexfil -u username -t 10
-                result = subprocess.run(
-                    [sys.executable, "nexfil.py", "-u", username, "-t", "10"],
-                    capture_output=True, text=True, timeout=90,
-                    cwd=str(nexfil_path),
-                )
-                for line in result.stdout.splitlines():
-                    # Nexfil output: [+] Platform: https://url
-                    if "[+]" in line or "https://" in line:
-                        hits.append(self._make_hit(
-                            platform="nexfil", url=line.strip(),
+            store.log(f"Running Nexfil (MAX) for: {username}", source="nexfil")
+            stdout, stderr, rc = run_tool_simple(
+                [sys.executable, "nexfil.py", "-u", username, "-t", "30"],
+                cwd=str(nexfil_path),
+                timeout=self.config.hunt.tool_timeout,
+                tool_name="nexfil",
+            )
+            for line in stdout.splitlines():
+                if "[+]" in line or "https://" in line:
+                    urls = re.findall(r'https?://[^\s]+', line)
+                    for url in urls:
+                        hit = self._make_hit(
+                            platform="nexfil", url=url.strip(),
                             confidence="MEDIUM", data={"username": username},
-                        ))
-            except Exception:
-                pass
-
+                        )
+                        hits.append(hit)
+                        store.add_hit(hit)
+            if stderr.strip():
+                for line in stderr.splitlines()[:10]:
+                    store.tool_log("nexfil", line, direction="stderr")
         return hits
 
     def _run_blackbird(self, usernames: List[str]) -> List[Dict[str, Any]]:
+        """
+        BLACKBIRD — MAXIMUM:
+        -u USERNAME    target username
+        --json         structured JSON output for parsing
+        Checks 400+ platforms.
+        """
         hits: List[Dict[str, Any]] = []
         bb_path = self.config.hunt.workspace / "tools" / "blackbird"
         if not bb_path.exists():
+            store.log("Blackbird not found — skipping", level="warn", source="blackbird")
             return hits
         for username in usernames[:5]:
-            try:
-                result = subprocess.run(
-                    [sys.executable, "blackbird.py", "-u", username, "--json"],
-                    capture_output=True, text=True, timeout=90,
-                    cwd=str(bb_path),
-                )
-                for line in result.stdout.splitlines():
-                    try:
-                        data = json.loads(line)
-                        url = data.get("url", "")
-                        site = data.get("site", "blackbird")
-                        if url and data.get("status") == "FOUND":
-                            hits.append(self._make_hit(
-                                platform=site, url=url,
-                                confidence=self._confidence(site),
-                            ))
-                    except json.JSONDecodeError:
-                        if "https://" in line:
-                            hits.append(self._make_hit(
-                                platform="blackbird", url=line.strip(),
+            store.log(f"Running Blackbird (MAX) for: {username}", source="blackbird")
+            stdout, stderr, rc = run_tool_simple(
+                [sys.executable, "blackbird.py", "-u", username, "--json"],
+                cwd=str(bb_path),
+                timeout=self.config.hunt.tool_timeout,
+                tool_name="blackbird",
+            )
+            for line in stdout.splitlines():
+                try:
+                    data = json.loads(line)
+                    url = data.get("url", "")
+                    site = data.get("site", "blackbird")
+                    if url and data.get("status") == "FOUND":
+                        hit = self._make_hit(
+                            platform=site, url=url,
+                            confidence=self._confidence(site),
+                        )
+                        hits.append(hit)
+                        store.add_hit(hit)
+                except json.JSONDecodeError:
+                    if "https://" in line:
+                        urls = re.findall(r'https?://[^\s]+', line)
+                        for url in urls:
+                            hit = self._make_hit(
+                                platform="blackbird", url=url.strip(),
                                 confidence="MEDIUM",
-                            ))
-            except Exception:
-                pass
+                            )
+                            hits.append(hit)
+                            store.add_hit(hit)
+            if stderr.strip():
+                for line in stderr.splitlines()[:10]:
+                    store.tool_log("blackbird", line, direction="stderr")
         return hits
 
     # ── Main scan entry point ───────────────────────────────────────
@@ -330,44 +438,53 @@ class UsernameScanner(BaseScanner):
     def scan_usernames(self, usernames: List[str]) -> List[Dict[str, Any]]:
         all_hits: List[Dict[str, Any]] = []
 
-        # WhatsMyName concurrent probes
+        # WhatsMyName — ALL sites, max workers
         sites = self._load_wmn()
-        for username in usernames:
-            with ThreadPoolExecutor(max_workers=20) as executor:
-                futures = {
-                    executor.submit(self._probe_wmn_site, site, username): site
-                    for site in sites[:300]
-                }
-                for future in as_completed(futures):
-                    try:
-                        hit = future.result()
-                        if hit:
-                            all_hits.append(hit)
-                    except Exception:
-                        pass
+        if sites:
+            store.log(f"WhatsMyName: probing ALL {len(sites)} sites per username (max power)", source="wmn")
+            for username in usernames:
+                with ThreadPoolExecutor(max_workers=50) as executor:
+                    # NO LIMIT — probe ALL sites
+                    futures = {
+                        executor.submit(self._probe_wmn_site, site, username): site
+                        for site in sites  # ALL sites, not just 300
+                    }
+                    wmn_hits = 0
+                    for future in as_completed(futures):
+                        try:
+                            hit = future.result()
+                            if hit:
+                                all_hits.append(hit)
+                                store.add_hit(hit)
+                                wmn_hits += 1
+                        except Exception:
+                            pass
+                    store.update_scan_stats({"wmn_hits": wmn_hits})
 
-        # Direct platform probes
+        # Direct platform probes — ALL platforms
         for username in usernames:
+            store.log(f"Direct probing ALL platforms: {username}", source="direct")
             all_hits.extend(self._direct_probers(username))
             all_hits.extend(self._github_commit_emails(username))
             all_hits.extend(self._roblox_probe(username))
 
-        # External tools
+        # External tools — ALL at maximum
         try:
             all_hits.extend(self._run_sherlock(usernames))
-        except Exception:
-            pass
+        except Exception as e:
+            store.log(f"Sherlock error: {e}", level="error", source="sherlock")
         try:
             all_hits.extend(self._run_maigret(usernames))
-        except Exception:
-            pass
+        except Exception as e:
+            store.log(f"Maigret error: {e}", level="error", source="maigret")
         try:
             all_hits.extend(self._run_nexfil(usernames))
-        except Exception:
-            pass
+        except Exception as e:
+            store.log(f"Nexfil error: {e}", level="error", source="nexfil")
         try:
             all_hits.extend(self._run_blackbird(usernames))
-        except Exception:
-            pass
+        except Exception as e:
+            store.log(f"Blackbird error: {e}", level="error", source="blackbird")
 
+        store.log(f"Username scan complete: {len(all_hits)} total hits (MAXIMUM power)", source="username_scanner")
         return all_hits

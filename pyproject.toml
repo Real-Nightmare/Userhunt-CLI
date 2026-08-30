@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "userhunt-cli"
-version = "2.1.0"
+version = "2.3.0"
 description = "Userhunt CLI — Autonomous AI-powered OSINT toolkit with deep hunt engine"
 readme = "README.md"
 license = {text = "MIT"}
@@ -45,6 +45,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "geopy>=2.4",
     "playwright>=1.40",
+    "aiohttp>=3.9",
 ]
 
 [project.optional-dependencies]
@@ -59,6 +60,7 @@ dev = [
 
 [project.scripts]
 userhunt = "userhunt.cli:main"
+userhunt-upgrade = "userhunt.cli:upgrade"
 
 [tool.setuptools.packages.find]
 where = ["."]

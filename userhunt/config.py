@@ -150,9 +150,11 @@ class HuntConfig:
     compress_output: bool = True  # gzip JSON/PDF output
     disk_warn_mb: int = 2000
     disk_abort_mb: int = 500
-    tool_timeout: int = 420
+    tool_timeout: int = 0  # 0 = no timeout (runs to completion)
     github_token: str = ""
     debug: bool = False
+    # Upgrade source
+    upgrade_repo: str = "Real-Nightmare/Userhunt-CLI"
 
     def to_dict(self) -> dict:
         d = asdict(self)
