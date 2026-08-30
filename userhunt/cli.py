@@ -63,13 +63,12 @@ def status_bar() -> None:
     ws = config.hunt.workspace
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ai_status = "[green]ON[/green]" if config.ai.enabled else "[red]OFF[/red]"
-    timeout_str = "none" if config.hunt.tool_timeout == 0 else f"{config.hunt.tool_timeout}s"
     console.print(
         f"[dim]Workspace: {ws} | Time: {ts} | AI: {ai_status} | "
         f"Model: {config.ai.model if config.ai.enabled else 'N/A'} | "
-        f"Timeout: {timeout_str}[/dim]"
+        f"Timeout: none[/dim]"
     )
-    console.print("[dim]Dashboard: http://0.0.0.0:8000 | Upgrade: userhunt upgrade[/dim]")
+    console.print("[dim]Dashboard: http://0.0.0.0:8000 | Upgrade: userhunt upgrade | No timeouts — full accuracy[/dim]")
 
 
 def menu() -> None:
@@ -725,30 +724,25 @@ def _start_dashboard() -> None:
 @click.option("-u", "usernames", multiple=True, help="Usernames to hunt (can repeat)")
 @click.option("-e", "emails", multiple=True, help="Emails to hunt (can repeat)")
 @click.option("-n", "names", multiple=True, help="Full names to hunt (can repeat)")
-@click.option("--timeout", "tool_timeout", type=int, default=None,
-              help="Tool timeout in seconds (0=no timeout, default=0)")
 @click.option("--no-dashboard", is_flag=True, help="Disable web dashboard")
 @click.pass_context
 def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names: tuple,
-         tool_timeout: int | None, no_dashboard: bool) -> None:
+         no_dashboard: bool) -> None:
     """Userhunt CLI — Autonomous AI-powered OSINT toolkit.
 
     Default action is deep scan. Use --deep with -u/-e/-n flags for
     non-interactive mode, or run without flags for the interactive menu.
     Dashboard: http://0.0.0.0:8000
 
-    Tools run with no timeout by default (0 = wait forever).
-    Use --timeout N to limit each tool to N seconds.
+    Tools run with no timeout — full accuracy, no restrictions.
     """
     if ctx.invoked_subcommand is not None:
         return
 
     config.load()
 
-    # Apply CLI timeout override
-    if tool_timeout is not None:
-        config.hunt.tool_timeout = tool_timeout
-        config.save_hunt()
+    # Ensure no timeouts
+    config.hunt.tool_timeout = 0
 
     # Start dashboard (unless disabled)
     if not no_dashboard:
@@ -783,9 +777,8 @@ def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names:
             case.names.append(n)
 
         if not case.is_empty():
-            timeout_str = "none" if config.hunt.tool_timeout == 0 else f"{config.hunt.tool_timeout}s"
             console.print(f"[bold green]Starting deep scan with {len(case.usernames)} usernames, {len(case.emails)} emails, {len(case.names)} names[/bold green]")
-            console.print(f"[dim]Tool timeout: {timeout_str} | Dashboard: http://0.0.0.0:8000[/dim]")
+            console.print("[dim]No timeouts — full accuracy. Dashboard: http://0.0.0.0:8000[/dim]")
             run_deep_hunt(case)
             case.save(save_path)
         else:

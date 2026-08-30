@@ -238,7 +238,7 @@ class UsernameScanner(BaseScanner):
             return hits
         for username in usernames[:10]:
             store.log(f"Running Sherlock (MAX) for: {username}", source="sherlock")
-            args = ["--print-found", "--timeout", "300", "--nsfw",
+            args = ["--print-found", "--nsfw",
                     "--ignore-exclusions", "--local", username]
             stdout, stderr, rc = run_tool_with_fallback(
                 tool_name="sherlock",
@@ -284,7 +284,7 @@ class UsernameScanner(BaseScanner):
             store.log(f"Running Maigret (MAX - ALL SITES) for: {username}", source="maigret")
             out_file = self.config.hunt.workspace / "data" / f"maigret_{username}.json"
             out_file.parent.mkdir(parents=True, exist_ok=True)
-            args = ["--timeout", "60", "-n", "2550", "--enrich", "--permute",
+            args = ["-n", "2550", "--enrich", "--permute",
                     "--with-domains", "--json", "ndjson", "-o", str(out_file), username]
             stdout, stderr, rc = run_tool_with_fallback(
                 tool_name="maigret",

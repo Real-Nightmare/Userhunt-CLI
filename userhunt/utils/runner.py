@@ -15,7 +15,7 @@ from typing import List, Optional, Callable, Any
 def run_tool(
     cmd: List[str],
     cwd: str = None,
-    timeout: int = 300,
+    timeout: int = 0,
     tool_name: str = "unknown",
     on_stdout: Optional[Callable[[str], None]] = None,
     on_stderr: Optional[Callable[[str], None]] = None,
@@ -26,7 +26,7 @@ def run_tool(
     Run a subprocess with streaming output capture.
 
     Returns (stdout_text, stderr_text, return_code).
-    Even if timeout is hit, returns ALL output captured so far.
+    Default timeout=0 means NO timeout — wait forever until tool finishes.
     """
     stdout_lines: List[str] = []
     stderr_lines: List[str] = []
@@ -92,22 +92,17 @@ def run_tool(
         t_out.start()
         t_err.start()
 
-        # Wait for completion with timeout
-        # timeout=0 means NO timeout — wait indefinitely
+        # Wait for tool to finish — NO timeout by default
         if timeout and timeout > 0:
             try:
                 proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                # Timeout hit — kill the process but KEEP all captured output
                 try:
                     proc.kill()
                 except Exception:
                     pass
-                # Give threads a moment to finish reading
                 t_out.join(timeout=2)
                 t_err.join(timeout=2)
-
-                # Log the timeout
                 try:
                     from userhunt.web.store import store
                     store.log(
@@ -119,15 +114,7 @@ def run_tool(
                     pass
         else:
             # No timeout — wait for tool to finish naturally
-            try:
-                from userhunt.web.store import store
-                store.log(
-                    f"Running {tool_name} (no timeout — waiting for completion)...",
-                    source=tool_name,
-                )
-            except Exception:
-                pass
-            proc.wait()  # Blocks until tool finishes
+            proc.wait()
 
         # Wait for reader threads to finish
         t_out.join(timeout=5)
@@ -175,7 +162,7 @@ def run_tool(
 def run_tool_simple(
     cmd: List[str],
     cwd: str = None,
-    timeout: int = 300,
+    timeout: int = 0,
     tool_name: str = "unknown",
 ) -> tuple[str, str, int]:
     """Simplified version — just returns (stdout, stderr, returncode)."""
@@ -185,7 +172,7 @@ def run_tool_simple(
 def run_tool_with_fallback(
     tool_name: str,
     cwd: str = None,
-    timeout: int = 300,
+    timeout: int = 0,
     # Primary command (e.g., ['python', 'sherlock.py', 'username'])
     primary: list = None,
     # Fallback commands (e.g., [['python', '-m', 'sherlock_project.sherlock', 'username']])
