@@ -20,6 +20,7 @@ def run_tool(
     on_stdout: Optional[Callable[[str], None]] = None,
     on_stderr: Optional[Callable[[str], None]] = None,
     env: Optional[dict] = None,
+    print_terminal: bool = True,
 ) -> tuple[str, str, int]:
     """
     Run a subprocess with streaming output capture.
@@ -45,6 +46,20 @@ def run_tool(
                     store.tool_log(tool_name, text, direction=direction)
                 except Exception:
                     pass
+                # Print to terminal in real-time
+                if print_terminal:
+                    try:
+                        from rich.console import Console
+                        _console = Console()
+                        if direction == "stderr":
+                            _console.print(f"  [dim yellow][{tool_name}][/dim yellow] {text}", highlight=False)
+                        else:
+                            _console.print(f"  [dim cyan][{tool_name}][/dim cyan] {text}", highlight=False)
+                    except Exception:
+                        if direction == "stderr":
+                            print(f"  [{tool_name}] {text}", file=sys.stderr)
+                        else:
+                            print(f"  [{tool_name}] {text}")
                 # Call callback if provided
                 if direction == "stdout" and on_stdout:
                     on_stdout(text)

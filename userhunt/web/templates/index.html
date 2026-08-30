@@ -27,7 +27,6 @@
     color: var(--text);
     overflow-x: hidden;
   }
-  /* ── Header ── */
   .header {
     background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1e2e 100%);
     border-bottom: 1px solid var(--border);
@@ -39,140 +38,36 @@
     top: 0;
     z-index: 100;
   }
-  .header h1 {
-    font-size: 18px;
-    color: var(--accent);
-    font-weight: 700;
-    letter-spacing: 1px;
-  }
+  .header h1 { font-size: 18px; color: var(--accent); font-weight: 700; letter-spacing: 1px; }
   .header h1 span { color: var(--text-dim); font-weight: 400; }
-  .status-pill {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
+  .status-pill { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
   .status-idle { background: var(--bg3); color: var(--text-dim); }
   .status-scanning { background: #0e3a1a; color: var(--green); animation: pulse 2s infinite; }
   .status-done { background: #1a2e1a; color: var(--green); }
   .status-error { background: #3a1a1a; color: var(--red); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
-
-  /* ── Stats bar ── */
-  .stats-bar {
-    display: flex;
-    gap: 16px;
-    padding: 12px 24px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 80px;
-  }
-  .stat-value {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--accent);
-  }
+  .conn-pill { padding: 2px 8px; border-radius: 8px; font-size: 10px; margin-left: 8px; }
+  .conn-ok { background: #0e3a1a; color: var(--green); }
+  .conn-fail { background: #3a1a1a; color: var(--red); }
+  .conn-poll { background: #2a2a0a; color: var(--yellow); }
+  .stats-bar { display: flex; gap: 16px; padding: 12px 24px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .stat { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+  .stat-value { font-size: 24px; font-weight: 700; color: var(--accent); }
   .stat-value.high { color: var(--green); }
   .stat-value.medium { color: var(--yellow); }
   .stat-value.low { color: var(--text-dim); }
-  .stat-label {
-    font-size: 10px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  /* ── Round progress ── */
-  .round-bar {
-    padding: 8px 24px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .round-bar .label {
-    font-size: 12px;
-    color: var(--text-dim);
-    min-width: 80px;
-  }
-  .progress-track {
-    flex: 1;
-    height: 6px;
-    background: var(--bg3);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--green));
-    border-radius: 3px;
-    transition: width 0.5s ease;
-    width: 0%;
-  }
-  .round-text {
-    font-size: 12px;
-    color: var(--text);
-    min-width: 60px;
-    text-align: right;
-  }
-
-  /* ── Main grid ── */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--border);
-    min-height: calc(100vh - 150px);
-  }
-  .panel {
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .panel-header {
-    padding: 10px 16px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-  }
-  .panel-header .count {
-    color: var(--text-dim);
-    font-weight: 400;
-  }
-  .panel-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px;
-    font-size: 12px;
-    line-height: 1.6;
-    min-height: 0;
-    max-height: 45vh;
-  }
-
-  /* ── Log lines ── */
-  .log-line {
-    padding: 2px 6px;
-    border-radius: 2px;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
+  .stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .round-bar { padding: 8px 24px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .round-bar .label { font-size: 12px; color: var(--text-dim); min-width: 80px; }
+  .progress-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 3px; transition: width 0.5s ease; width: 0%; }
+  .round-text { font-size: 12px; color: var(--text); min-width: 60px; text-align: right; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); min-height: calc(100vh - 150px); }
+  .panel { background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+  .panel-header { padding: 10px 16px; background: var(--bg2); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .panel-header .count { color: var(--text-dim); font-weight: 400; }
+  .panel-body { flex: 1; overflow-y: auto; padding: 8px; font-size: 12px; line-height: 1.6; min-height: 0; max-height: 45vh; }
+  .log-line { padding: 2px 6px; border-radius: 2px; white-space: pre-wrap; word-break: break-all; }
   .log-line:hover { background: var(--bg3); }
   .log-info { color: var(--text-dim); }
   .log-hit { color: var(--green); font-weight: 600; }
@@ -180,263 +75,120 @@
   .log-warn { color: var(--yellow); }
   .log-ai { color: var(--purple); }
   .log-tool { color: var(--cyan); }
-  .log-time {
-    color: var(--text-dim);
-    opacity: 0.5;
-    margin-right: 6px;
-    font-size: 10px;
-  }
-
-  /* ── Tool output ── */
-  .tool-line {
-    padding: 1px 6px;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-  .tool-line .tool-name {
-    color: var(--accent);
-    font-weight: 600;
-    margin-right: 6px;
-  }
+  .log-time { color: var(--text-dim); opacity: 0.5; margin-right: 6px; font-size: 10px; }
+  .tool-line { padding: 1px 6px; white-space: pre-wrap; word-break: break-all; }
+  .tool-line .tool-name { color: var(--accent); font-weight: 600; margin-right: 6px; }
   .tool-stdout { color: var(--text); }
   .tool-stderr { color: var(--yellow); opacity: 0.7; }
-
-  /* ── Hits table ── */
-  .hits-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-  }
-  .hits-table th {
-    text-align: left;
-    padding: 6px 8px;
-    background: var(--bg2);
-    color: var(--accent);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    font-size: 10px;
-    text-transform: uppercase;
-  }
-  .hits-table td {
-    padding: 5px 8px;
-    border-bottom: 1px solid var(--bg3);
-    max-width: 250px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  .hits-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .hits-table th { text-align: left; padding: 6px 8px; background: var(--bg2); color: var(--accent); border-bottom: 1px solid var(--border); position: sticky; top: 0; font-size: 10px; text-transform: uppercase; }
+  .hits-table td { padding: 5px 8px; border-bottom: 1px solid var(--bg3); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hits-table tr:hover td { background: var(--bg3); }
   .conf-HIGH { color: var(--green); font-weight: 600; }
   .conf-MEDIUM { color: var(--yellow); }
   .conf-LOW { color: var(--text-dim); }
-  .hit-url {
-    color: var(--accent);
-    text-decoration: none;
-  }
+  .hit-url { color: var(--accent); text-decoration: none; }
   .hit-url:hover { text-decoration: underline; }
-
-  /* ── Pivot log ── */
-  .pivot-entry {
-    padding: 3px 6px;
-    border-left: 2px solid var(--bg3);
-    margin: 2px 0;
-  }
+  .pivot-entry { padding: 3px 6px; border-left: 2px solid var(--bg3); margin: 2px 0; }
   .pivot-entry.ai { border-color: var(--purple); }
   .pivot-entry.regex { border-color: var(--accent); }
   .pivot-value { color: var(--green); font-weight: 600; }
   .pivot-action { color: var(--yellow); }
   .pivot-reason { color: var(--text-dim); font-size: 11px; }
   .pivot-source { color: var(--purple); font-size: 10px; }
-
-  /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
-
-  /* ── Fullscreen toggle ── */
   .panel.full { grid-column: 1 / -1; }
-  .fullscreen-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 2px 6px;
-    font-size: 10px;
-    cursor: pointer;
-    border-radius: 3px;
-  }
+  .fullscreen-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 2px 6px; font-size: 10px; cursor: pointer; border-radius: 3px; }
   .fullscreen-btn:hover { color: var(--text); border-color: var(--text-dim); }
-
-  /* ── Empty state ── */
-  .empty {
-    color: var(--text-dim);
-    text-align: center;
-    padding: 40px;
-    font-size: 13px;
-  }
+  .empty { color: var(--text-dim); text-align: center; padding: 40px; font-size: 13px; }
   .empty .icon { font-size: 32px; margin-bottom: 12px; }
-
-  /* ── Responsive ── */
-  @media (max-width: 900px) {
-    .grid { grid-template-columns: 1fr; }
-    .stats-bar { gap: 8px; }
-  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .stats-bar { gap: 8px; } }
 </style>
 </head>
 <body>
 
-<!-- Header -->
 <div class="header">
   <h1>⚡ USERHUNT <span>— Live Dashboard</span></h1>
-  <div id="status-pill" class="status-pill status-idle">IDLE</div>
+  <div>
+    <span id="conn-pill" class="conn-pill conn-poll">CONNECTING</span>
+    <span id="status-pill" class="status-pill status-idle">IDLE</span>
+  </div>
 </div>
 
-<!-- Stats bar -->
 <div class="stats-bar">
-  <div class="stat">
-    <div class="stat-value" id="total-hits">0</div>
-    <div class="stat-label">Total Hits</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value high" id="high-hits">0</div>
-    <div class="stat-label">High</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value medium" id="med-hits">0</div>
-    <div class="stat-label">Medium</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value low" id="low-hits">0</div>
-    <div class="stat-label">Low</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="pivot-count">0</div>
-    <div class="stat-label">Pivots</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="evidence-count">0</div>
-    <div class="stat-label">Evidence</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="ai-count">0</div>
-    <div class="stat-label">AI Verdicts</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="elapsed">0s</div>
-    <div class="stat-label">Elapsed</div>
-  </div>
+  <div class="stat"><div class="stat-value" id="total-hits">0</div><div class="stat-label">Total Hits</div></div>
+  <div class="stat"><div class="stat-value high" id="high-hits">0</div><div class="stat-label">High</div></div>
+  <div class="stat"><div class="stat-value medium" id="med-hits">0</div><div class="stat-label">Medium</div></div>
+  <div class="stat"><div class="stat-value low" id="low-hits">0</div><div class="stat-label">Low</div></div>
+  <div class="stat"><div class="stat-value" id="pivot-count">0</div><div class="stat-label">Pivots</div></div>
+  <div class="stat"><div class="stat-value" id="evidence-count">0</div><div class="stat-label">Evidence</div></div>
+  <div class="stat"><div class="stat-value" id="ai-count">0</div><div class="stat-label">AI Verdicts</div></div>
+  <div class="stat"><div class="stat-value" id="elapsed">0s</div><div class="stat-label">Elapsed</div></div>
 </div>
 
-<!-- Round progress -->
 <div class="round-bar">
   <span class="label">ROUND</span>
-  <div class="progress-track">
-    <div class="progress-fill" id="round-fill"></div>
-  </div>
+  <div class="progress-track"><div class="progress-fill" id="round-fill"></div></div>
   <span class="round-text" id="round-text">0 / 8</span>
 </div>
 
-<!-- Main grid -->
 <div class="grid">
-  <!-- System Log -->
   <div class="panel" id="panel-log">
-    <div class="panel-header">
-      📋 System Log
-      <div>
-        <span class="count" id="log-count">0 lines</span>
-        <button class="fullscreen-btn" onclick="toggleFull('panel-log')">⛶</button>
-      </div>
-    </div>
-    <div class="panel-body" id="log-body">
-      <div class="empty"><div class="icon">🔍</div>Waiting for hunt to start...</div>
-    </div>
+    <div class="panel-header">📋 System Log <div><span class="count" id="log-count">0 lines</span> <button class="fullscreen-btn" onclick="toggleFull('panel-log')">⛶</button></div></div>
+    <div class="panel-body" id="log-body"><div class="empty"><div class="icon">🔍</div>Waiting for hunt to start...</div></div>
   </div>
-
-  <!-- Tool Output -->
   <div class="panel" id="panel-tools">
-    <div class="panel-header">
-      🔧 Tool Output (Live)
-      <div>
-        <span class="count" id="tool-count">0 lines</span>
-        <button class="fullscreen-btn" onclick="toggleFull('panel-tools')">⛶</button>
-      </div>
-    </div>
-    <div class="panel-body" id="tool-body">
-      <div class="empty"><div class="icon">⚙️</div>Tool output will stream here...</div>
-    </div>
+    <div class="panel-header">🔧 Tool Output (Live) <div><span class="count" id="tool-count">0 lines</span> <button class="fullscreen-btn" onclick="toggleFull('panel-tools')">⛶</button></div></div>
+    <div class="panel-body" id="tool-body"><div class="empty"><div class="icon">⚙️</div>Tool output will stream here...</div></div>
   </div>
-
-  <!-- Hits -->
   <div class="panel" id="panel-hits">
-    <div class="panel-header">
-      🎯 Hits Found
-      <div>
-        <span class="count" id="hits-count">0 hits</span>
-        <button class="fullscreen-btn" onclick="toggleFull('panel-hits')">⛶</button>
-      </div>
-    </div>
-    <div class="panel-body" id="hits-body">
-      <div class="empty"><div class="icon">🎯</div>Hits will appear here...</div>
-    </div>
+    <div class="panel-header">🎯 Hits Found <div><span class="count" id="hits-count">0 hits</span> <button class="fullscreen-btn" onclick="toggleFull('panel-hits')">⛶</button></div></div>
+    <div class="panel-body" id="hits-body"><div class="empty"><div class="icon">🎯</div>Hits will appear here...</div></div>
   </div>
-
-  <!-- Pivot Log -->
   <div class="panel" id="panel-pivots">
-    <div class="panel-header">
-      🔄 Pivot Log
-      <div>
-        <span class="count" id="pivot-count-label">0 pivots</span>
-        <button class="fullscreen-btn" onclick="toggleFull('panel-pivots')">⛶</button>
-      </div>
-    </div>
-    <div class="panel-body" id="pivots-body">
-      <div class="empty"><div class="icon">🔄</div>Pivots will appear here...</div>
-    </div>
+    <div class="panel-header">🔄 Pivot Log <div><span class="count" id="pivot-count-label">0 pivots</span> <button class="fullscreen-btn" onclick="toggleFull('panel-pivots')">⛶</button></div></div>
+    <div class="panel-body" id="pivots-body"><div class="empty"><div class="icon">🔄</div>Pivots will appear here...</div></div>
   </div>
 </div>
 
 <script>
-// ── State ──
 let lastTimestamp = 0;
 let logLines = [];
 let toolLines = [];
-let hits = [];
-let pivots = [];
-let evidence = [];
-let aiVerdicts = [];
+let useSSE = false;
+let pollInterval = null;
 
-// ── Formatting ──
 function fmtTime(ts) {
   if (!ts) return '';
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString('en-US', {hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
 }
-
 function fmtElapsed(secs) {
   if (secs < 60) return Math.round(secs) + 's';
   if (secs < 3600) return Math.floor(secs/60) + 'm ' + Math.round(secs%60) + 's';
   return Math.floor(secs/3600) + 'h ' + Math.floor((secs%3600)/60) + 'm';
 }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function setConn(ok, mode) {
+  const pill = document.getElementById('conn-pill');
+  pill.className = 'conn-pill ' + (ok ? 'conn-ok' : mode === 'poll' ? 'conn-poll' : 'conn-fail');
+  pill.textContent = ok ? 'LIVE' : mode === 'poll' ? 'POLLING' : 'RECONNECTING';
 }
 
-// ── Render functions ──
 function renderLogs(logs) {
   const el = document.getElementById('log-body');
   if (!logs || logs.length === 0) return;
-  // Remove empty state
   if (el.querySelector('.empty')) el.innerHTML = '';
   for (const l of logs) {
     logLines.push(l);
     const div = document.createElement('div');
-    const cls = 'log-' + (l.level || 'info');
-    div.className = 'log-line ' + cls;
+    div.className = 'log-line log-' + (l.level || 'info');
     div.innerHTML = '<span class="log-time">' + fmtTime(l.time) + '</span>' + escHtml(l.message);
     el.appendChild(div);
   }
-  // Keep max 2000 lines
   while (el.children.length > 2000) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
   document.getElementById('log-count').textContent = logLines.length + ' lines';
@@ -449,8 +201,7 @@ function renderToolOutput(items) {
   for (const t of items) {
     toolLines.push(t);
     const div = document.createElement('div');
-    const cls = t.direction === 'stderr' ? 'tool-stderr' : 'tool-stdout';
-    div.className = 'tool-line ' + cls;
+    div.className = 'tool-line ' + (t.direction === 'stderr' ? 'tool-stderr' : 'tool-stdout');
     div.innerHTML = '<span class="tool-name">[' + escHtml(t.tool) + ']</span>' + escHtml(t.line);
     el.appendChild(div);
   }
@@ -460,55 +211,38 @@ function renderToolOutput(items) {
 }
 
 function renderHits(allHits) {
-  hits = allHits;
   const el = document.getElementById('hits-body');
-  if (!hits || hits.length === 0) return;
+  if (!allHits || allHits.length === 0) return;
   if (el.querySelector('.empty')) el.innerHTML = '';
-
   let html = '<table class="hits-table"><thead><tr><th>#</th><th>Platform</th><th>Confidence</th><th>URL</th><th>Display Name</th><th>Scanner</th></tr></thead><tbody>';
-  for (let i = 0; i < hits.length; i++) {
-    const h = hits[i];
+  for (let i = 0; i < allHits.length; i++) {
+    const h = allHits[i];
     const conf = h.confidence || 'MEDIUM';
     const url = escHtml(h.url || '');
     const shortUrl = url.length > 60 ? url.substring(0, 60) + '...' : url;
-    html += '<tr>';
-    html += '<td>' + (i+1) + '</td>';
-    html += '<td>' + escHtml(h.platform || '') + '</td>';
-    html += '<td class="conf-' + conf + '">' + conf + '</td>';
-    html += '<td><a class="hit-url" href="' + url + '" target="_blank">' + shortUrl + '</a></td>';
-    html += '<td>' + escHtml(h.display_name || '') + '</td>';
-    html += '<td>' + escHtml(h.scanner || '') + '</td>';
-    html += '</tr>';
+    html += '<tr><td>' + (i+1) + '</td><td>' + escHtml(h.platform || '') + '</td><td class="conf-' + conf + '">' + conf + '</td><td><a class="hit-url" href="' + url + '" target="_blank">' + shortUrl + '</a></td><td>' + escHtml(h.display_name || '') + '</td><td>' + escHtml(h.scanner || '') + '</td></tr>';
   }
   html += '</tbody></table>';
   el.innerHTML = html;
   el.scrollTop = el.scrollHeight;
-  document.getElementById('hits-count').textContent = hits.length + ' hits';
+  document.getElementById('hits-count').textContent = allHits.length + ' hits';
 }
 
 function renderPivots(items) {
-  pivots = items;
   const el = document.getElementById('pivots-body');
-  if (!pivots || pivots.length === 0) return;
+  if (!items || items.length === 0) return;
   if (el.querySelector('.empty')) el.innerHTML = '';
-
   for (const p of items) {
     const div = document.createElement('div');
-    const cls = p.by === 'ai' ? 'ai' : 'regex';
-    div.className = 'pivot-entry ' + cls;
-    div.innerHTML =
-      '<span class="pivot-source">[' + escHtml(p.source || '?') + ' R' + (p.round || '?') + ']</span> ' +
-      '<span class="pivot-value">' + escHtml(p.found || p.value || '?') + '</span> ' +
-      '<span class="pivot-action">→ ' + escHtml(p.action || '?') + '</span> ' +
-      '<span class="pivot-reason">(' + escHtml(p.reason || '') + ')</span>';
+    div.className = 'pivot-entry ' + (p.by === 'ai' ? 'ai' : 'regex');
+    div.innerHTML = '<span class="pivot-source">[' + escHtml(p.source || '?') + ' R' + (p.round || '?') + ']</span> <span class="pivot-value">' + escHtml(p.found || p.value || '?') + '</span> <span class="pivot-action">→ ' + escHtml(p.action || '?') + '</span> <span class="pivot-reason">(' + escHtml(p.reason || '') + ')</span>';
     el.appendChild(div);
   }
   while (el.children.length > 500) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
-  document.getElementById('pivot-count-label').textContent = pivots.length + ' pivots';
+  document.getElementById('pivot-count-label').textContent = items.length + ' pivots';
 }
 
-// ── Update UI ──
 function updateStats(state) {
   document.getElementById('total-hits').textContent = state.hit_count || 0;
   document.getElementById('high-hits').textContent = state.high_count || 0;
@@ -518,87 +252,77 @@ function updateStats(state) {
   document.getElementById('evidence-count').textContent = (state.evidence || []).length;
   document.getElementById('ai-count').textContent = (state.ai_verdicts || []).length;
   document.getElementById('elapsed').textContent = fmtElapsed(state.elapsed_seconds || 0);
-
-  // Round progress
   const cur = state.current_round || 0;
   const total = state.total_rounds || 8;
-  const pct = total > 0 ? (cur / total * 100) : 0;
-  document.getElementById('round-fill').style.width = pct + '%';
+  document.getElementById('round-fill').style.width = (total > 0 ? cur / total * 100 : 0) + '%';
   document.getElementById('round-text').textContent = cur + ' / ' + total;
-
-  // Status pill
   const pill = document.getElementById('status-pill');
   const status = state.status || 'idle';
   pill.className = 'status-pill status-' + status;
   pill.textContent = status.toUpperCase();
 }
 
-// ── Fullscreen toggle ──
-function toggleFull(panelId) {
-  const panel = document.getElementById(panelId);
-  panel.classList.toggle('full');
+function toggleFull(panelId) { document.getElementById(panelId).classList.toggle('full'); }
+
+function processState(state) {
+  updateStats(state);
+  if (state.logs && state.logs.length > 0) renderLogs(state.logs);
+  if (state.tool_output && state.tool_output.length > 0) renderToolOutput(state.tool_output);
+  if (state.hits && state.hits.length > 0) renderHits(state.hits);
+  if (state.pivots && state.pivots.length > 0) renderPivots(state.pivots);
+  lastTimestamp = state.timestamp || 0;
 }
 
-// ── SSE connection ──
+// ── SSE with fallback polling ──
 function connectSSE() {
+  if (useSSE) return;
   const source = new EventSource('/sse');
+  let gotMessage = false;
+
+  source.onopen = function() {
+    useSSE = true;
+    setConn(true, 'sse');
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  };
 
   source.onmessage = function(event) {
+    gotMessage = true;
     try {
-      const state = JSON.parse(event.data);
-
-      // Update stats
-      updateStats(state);
-
-      // Append new logs
-      if (state.logs && state.logs.length > 0) {
-        renderLogs(state.logs);
-      }
-
-      // Append new tool output
-      if (state.tool_output && state.tool_output.length > 0) {
-        renderToolOutput(state.tool_output);
-      }
-
-      // Update hits (full replacement)
-      if (state.hits && state.hits.length > 0) {
-        renderHits(state.hits);
-      }
-
-      // Append new pivots
-      if (state.pivots && state.pivots.length > 0) {
-        renderPivots(state.pivots);
-      }
-
-      // Update timestamp for next request
-      lastTimestamp = state.timestamp || 0;
-
-    } catch (e) {
-      console.error('SSE parse error:', e);
-    }
+      processState(JSON.parse(event.data));
+    } catch (e) { console.error('SSE parse error:', e); }
   };
 
   source.onerror = function() {
-    // Reconnect after 3 seconds
-    setTimeout(connectSSE, 3000);
+    source.close();
+    useSSE = false;
+    setConn(false, 'poll');
+    // Start polling fallback
+    startPolling();
+    // Retry SSE in 5s
+    setTimeout(connectSSE, 5000);
   };
 }
 
-// ── Initial state load ──
-fetch('/api/state')
-  .then(r => r.json())
-  .then(state => {
-    updateStats(state);
-    if (state.logs && state.logs.length > 0) renderLogs(state.logs);
-    if (state.tool_output && state.tool_output.length > 0) renderToolOutput(state.tool_output);
-    if (state.hits && state.hits.length > 0) renderHits(state.hits);
-    if (state.pivots && state.pivots.length > 0) renderPivots(state.pivots);
-    lastTimestamp = state.timestamp || 0;
-  })
-  .catch(() => {});
+function startPolling() {
+  if (pollInterval) return;
+  pollInterval = setInterval(function() {
+    fetch('/api/state?since=' + lastTimestamp)
+      .then(function(r) { return r.json(); })
+      .then(function(state) { processState(state); setConn(true, 'poll'); })
+      .catch(function() { setConn(false, 'poll'); });
+  }, 2000);
+}
 
-// ── Start SSE ──
-connectSSE();
+// ── Initial load + start ──
+fetch('/api/state').then(function(r) { return r.json(); }).then(function(state) {
+  processState(state);
+  connectSSE();
+  // If SSE doesn't connect in 3s, start polling
+  setTimeout(function() { if (!useSSE) startPolling(); }, 3000);
+}).catch(function() {
+  connectSSE();
+  setTimeout(function() { if (!useSSE) startPolling(); }, 3000);
+});
 </script>
 </body>
 </html>

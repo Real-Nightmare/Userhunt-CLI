@@ -103,6 +103,9 @@ def start_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Start the web dashboard server (blocking)."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    # Add startup log so dashboard has data immediately
+    store.log("Dashboard server started at http://0.0.0.0:8000", source="system")
+    store.log("Waiting for hunt to begin...", source="system")
     app = create_app()
     runner = web.AppRunner(app)
     loop.run_until_complete(runner.setup())
