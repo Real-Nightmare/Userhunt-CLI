@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "userhunt_cli"
+version = "2.0.0"
+description = "USERHUNT CLI — Autonomous AI-powered OSINT toolkit with deep hunt engine"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "USERHUNT"}]
+keywords = ["osint", "username", "investigation", "ai", "pivot"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "requests>=2.31",
+    "aiohttp>=3.9",
+    "colorama>=0.4",
+    "rich>=13",
+    "reportlab>=4.0",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "requests-futures>=1.0",
+    "PySocks>=1.7",
+    "chardet>=5.2",
+    "phonenumbers>=8.13",
+    "dnspython>=2.4",
+    "python-whois>=0.8",
+    "exifread>=3.0",
+    "Pillow>=10.0",
+    "click>=8.1",
+    "pydantic>=2.0",
+    "tenacity>=8.2",
+    "python-dotenv>=1.0",
+    "geopy>=2.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "black>=23.0",
+    "ruff>=0.1",
+    "mypy>=1.7",
+]
+
+[project.scripts]
+userhunt = "userhunt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+userhunt = ["py.typed", "data/*.json", "templates/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
