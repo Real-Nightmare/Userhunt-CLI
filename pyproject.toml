@@ -61,7 +61,7 @@ dev = [
 userhunt = "userhunt.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 
 [tool.setuptools.package-data]
 userhunt = ["py.typed", "data/*.json", "templates/*"]
