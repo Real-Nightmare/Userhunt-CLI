@@ -286,7 +286,7 @@ class ScanManager:
         if not username_scanner:
             return []
 
-        # Build list of tools based on mode
+        # Build list of tools based on mode - ensure consistent (name, func, *args) format
         tools = [
             ("WhatsMyName", self._run_wmn, username_scanner, usernames),
             ("DirectProbes", self._run_direct_probers, username_scanner, usernames),
@@ -301,8 +301,9 @@ class ScanManager:
                 ("Blackbird", username_scanner._run_blackbird, usernames),
             ])
 
-        # Mark all as RUNNING before launch
-        for name, _, _ in tools:
+        # Mark all as RUNNING before launch - extract just the name (first element)
+        for tool_tuple in tools:
+            name = tool_tuple[0]
             ts = self.tool_status.get(name)
             if ts:
                 ts.start()
@@ -386,7 +387,9 @@ class ScanManager:
                 ("Email2Phone", email_scanner._email2phonenumber, emails),
             ])
 
-        for name, _, _ in tools:
+        # Mark all as RUNNING before launch - extract just the name (first element)
+        for tool_tuple in tools:
+            name = tool_tuple[0]
             ts = self.tool_status.get(name)
             if ts:
                 ts.start()
@@ -466,7 +469,9 @@ class ScanManager:
             ("Ignorant", phone_scanner._ignorant, phone),
             ("PhoneInfoga", phone_scanner._phoneinfoga, phone),
         ]
-        for name, _, _ in tools:
+        # Mark all as RUNNING before launch - extract just the name (first element)
+        for tool_tuple in tools:
+            name = tool_tuple[0]
             ts2 = self.tool_status.get(name)
             if ts2:
                 ts2.start()
@@ -514,7 +519,9 @@ class ScanManager:
                 ("theHarvester", domain_scanner._theharvester, domain),
             ])
 
-        for name, _, _ in tools:
+        # Mark all as RUNNING before launch - extract just the name (first element)
+        for tool_tuple in tools:
+            name = tool_tuple[0]
             ts = self.tool_status.get(name)
             if ts:
                 ts.start()
@@ -550,7 +557,9 @@ class ScanManager:
             ("WaybackURL", url_scanner._wayback_availability, url),
             ("Photon", url_scanner._photon, url),
         ]
-        for name, _, _ in tools:
+        # Mark all as RUNNING before launch - extract just the name (first element)
+        for tool_tuple in tools:
+            name = tool_tuple[0]
             ts = self.tool_status.get(name)
             if ts:
                 ts.start()
