@@ -84,7 +84,7 @@ def menu() -> None:
         ("3", "Add FULL NAMES"),
         ("4", "Add EXTRA CLUES (phones, links, Discord, Roblox, crypto, images, domains)"),
         ("5", "Show case"),
-        ("[6]", "▶ RUN FULL DEEP HUNT (default)"),
+        ("[6]", "▶ HUNT — select mode (quick/full/deep)"),
         ("7", "Rebuild AI profile + PDF"),
         ("8", "Export JSON"),
         ("9", "Clear case"),
@@ -293,7 +293,8 @@ def _make_live_status_table(scan_manager: ScanManager, rnd: int, total_rounds: i
 
 # ── Deep hunt ──────────────────────────────────────────────────────
 
-def run_deep_hunt(case: Case) -> None:
+def run_hunt(case: Case, mode: str = "full") -> None:
+    """Run hunt with specified mode: quick, full, or deep."""
     if case.is_empty():
         console.print("[bold red]Case is empty. Add identifiers first.[/bold red]")
         return
@@ -326,8 +327,8 @@ def run_deep_hunt(case: Case) -> None:
         source="hunt",
     )
 
-    console.print(f"[bold green]>> Userhunt deep hunt starting (rounds 1-{config.hunt.max_rounds})[/bold green]")
-    console.print("[bold green]>> Dashboard: http://0.0.0.0:8000[/bold green]")
+    console.print(f"[bold green]>> Userhunt {mode.upper()} hunt starting (rounds 1-{config.hunt.max_rounds})[/bold green]")
+    console.print(f"[bold green]>> Dashboard: http://0.0.0.0:8000 | Mode: {mode}[/bold green]")
 
     # Run the scan inside a Rich Live display for the tool status table
     # The scan blocks the main thread — that's intentional so the Live table works
@@ -360,9 +361,9 @@ def run_deep_hunt(case: Case) -> None:
             usernames = [u for u in case.usernames if u not in case.done_usernames]
             if usernames:
                 dashboard.log(f"Scanning {len(usernames)} username(s)...", source="username")
-                sys.stderr.write(f">> deep username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})\n")
+                sys.stderr.write(f">> {mode} username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})\n")
                 sys.stderr.flush()
-                round_hits = scan_manager.scan_usernames(usernames)
+                round_hits = scan_manager.scan_usernames(usernames, mode=mode)
                 for hit in round_hits:
                     case.add_hit(hit)
                 for u in usernames:
@@ -375,9 +376,9 @@ def run_deep_hunt(case: Case) -> None:
             emails = [e for e in case.emails if e not in case.done_emails]
             if emails:
                 dashboard.log(f"Scanning {len(emails)} email(s)...", source="email")
-                sys.stderr.write(f">> deep email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})\n")
+                sys.stderr.write(f">> {mode} email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})\n")
                 sys.stderr.flush()
-                round_hits = scan_manager.scan_emails(emails)
+                round_hits = scan_manager.scan_emails(emails, mode=mode)
                 for hit in round_hits:
                     case.add_hit(hit)
                 for e in emails:
@@ -389,9 +390,9 @@ def run_deep_hunt(case: Case) -> None:
             names = [n for n in case.names if n not in case.done_names]
             if names:
                 dashboard.log(f"Scanning {len(names)} name(s)...", source="name")
-                sys.stderr.write(f">> deep name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})\n")
+                sys.stderr.write(f">> {mode} name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})\n")
                 sys.stderr.flush()
-                round_hits = scan_manager.scan_names(names)
+                round_hits = scan_manager.scan_names(names, mode=mode)
                 for hit in round_hits:
                     case.add_hit(hit)
                 for n in names:
@@ -403,7 +404,7 @@ def run_deep_hunt(case: Case) -> None:
             phones = list(case.done_phones)
             if phones:
                 dashboard.log(f"Scanning {len(phones)} phone(s)...", source="phone")
-                round_hits = scan_manager.scan_phones(phones)
+                round_hits = scan_manager.scan_phones(phones, mode=mode)
                 for hit in round_hits:
                     case.add_hit(hit)
                 dashboard.log(f"Phone scan: {len(round_hits)} hits", source="phone")
@@ -413,7 +414,7 @@ def run_deep_hunt(case: Case) -> None:
             domains = list(case.done_domains)
             if domains:
                 dashboard.log(f"Scanning {len(domains)} domain(s)...", source="domain")
-                round_hits = scan_manager.scan_domains(domains)
+                round_hits = scan_manager.scan_domains(domains, mode=mode)
                 for hit in round_hits:
                     case.add_hit(hit)
                 dashboard.log(f"Domain scan: {len(round_hits)} hits", source="domain")
@@ -702,8 +703,24 @@ def pivot_log_view(case: Case) -> None:
     Prompt.ask("\nPress Enter to continue")
 
 
+def _pick_hunt_mode() -> str:
+    """Let user choose hunt mode."""
+    console.print("\n[bold cyan]HUNT MODES:[/bold cyan]")
+    modes_table = Table(box=box.ROUNDED, show_header=False)
+    modes_table.add_column("Key", style="bold cyan", width=4)
+    modes_table.add_column("Mode", style="bold white", width=8)
+    modes_table.add_column("Tools", style="white")
+    modes_table.add_column("Speed", style="dim")
+    modes_table.add_row("1", "QUICK", "Sherlock + Maigret + WMN + probes (6 tools)", "Fast")
+    modes_table.add_row("2", "FULL", "All 15+ OSINT tools in parallel", "Medium")
+    modes_table.add_row("3", "DEEP", "Full + h8mail + email2phone + all extras", "Thorough")
+    console.print(modes_table)
+    choice = Prompt.ask("Select mode", choices=["1", "2", "3"], default="2")
+    return {"1": "quick", "2": "full", "3": "deep"}.get(choice, "full")
+
+
 def _auto_hunt_prompt(case: Case, save_path: Path) -> None:
-    """After adding identifiers, offer to start the deep hunt immediately."""
+    """After adding identifiers, offer to start the hunt immediately."""
     count = len(case.usernames) + len(case.emails) + len(case.names)
     console.print(
         f"\n[bold cyan]Ready to hunt {count} identifier(s) across all tools:[/bold cyan]"
@@ -712,9 +729,11 @@ def _auto_hunt_prompt(case: Case, save_path: Path) -> None:
     console.print("[dim]  Holehe, Gravatar, emailrep, phonenumbers, phoneinfoga, DNS, WHOIS...[/dim]")
     console.print("[dim]  Dashboard: http://0.0.0.0:8000[/dim]")
     try:
-        if Confirm.ask("\n[bold green]Start deep scan now?[/bold green]", default=True):
-            case.save(save_path)
-            run_deep_hunt(case)
+        if Confirm.ask("\n[bold green]Start hunt now?[/bold green]", default=True):
+            mode = _pick_hunt_mode()
+            if mode:
+                case.save(save_path)
+                run_hunt(case, mode=mode)
     except Exception:
         pass
 
@@ -737,18 +756,18 @@ def _start_dashboard() -> None:
 # ── Click entry point ──────────────────────────────────────────────
 
 @click.group(invoke_without_command=True)
-@click.option("--deep", is_flag=True, help="Run deep scan on saved case and exit")
+@click.option("--hunt", "hunt_mode", type=click.Choice(["quick", "full", "deep"]), default=None, help="Run hunt with mode and exit")
 @click.option("-u", "usernames", multiple=True, help="Usernames to hunt (can repeat)")
 @click.option("-e", "emails", multiple=True, help="Emails to hunt (can repeat)")
 @click.option("-n", "names", multiple=True, help="Full names to hunt (can repeat)")
 @click.option("--no-dashboard", is_flag=True, help="Disable web dashboard")
 @click.pass_context
-def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names: tuple,
+def main(ctx: click.Context, hunt_mode: str, usernames: tuple, emails: tuple, names: tuple,
          no_dashboard: bool) -> None:
     """Userhunt CLI — Autonomous AI-powered OSINT toolkit.
 
-    Default action is deep scan. Use --deep with -u/-e/-n flags for
-    non-interactive mode, or run without flags for the interactive menu.
+    Use --hunt quick|full|deep with -u/-e/-n flags for non-interactive mode,
+    or run without flags for the interactive menu.
     Dashboard: http://0.0.0.0:8000
 
     Tools run with no timeout — full accuracy, no restrictions.
@@ -765,8 +784,8 @@ def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names:
     if not no_dashboard:
         _start_dashboard()
 
-    # Non-interactive deep scan mode
-    if deep or usernames or emails or names:
+    # Non-interactive hunt mode
+    if hunt_mode or usernames or emails or names:
         case = Case(
             max_hits=config.hunt.max_hits,
             max_pivot_log=config.hunt.max_pivot_log,
@@ -794,9 +813,10 @@ def main(ctx: click.Context, deep: bool, usernames: tuple, emails: tuple, names:
             case.names.append(n)
 
         if not case.is_empty():
-            console.print(f"[bold green]Starting deep scan with {len(case.usernames)} usernames, {len(case.emails)} emails, {len(case.names)} names[/bold green]")
+            mode = hunt_mode or "full"
+            console.print(f"[bold green]Starting {mode} hunt with {len(case.usernames)} usernames, {len(case.emails)} emails, {len(case.names)} names[/bold green]")
             console.print("[dim]No timeouts — full accuracy. Dashboard: http://0.0.0.0:8000[/dim]")
-            run_deep_hunt(case)
+            run_hunt(case, mode=mode)
             case.save(save_path)
         else:
             console.print("[yellow]No identifiers to hunt. Use -u, -e, -n flags or run interactively.[/yellow]")
@@ -1015,7 +1035,9 @@ def run_interactive() -> None:
         elif choice == "5":
             show_case(case)
         elif choice == "6":
-            run_deep_hunt(case)
+            mode = _pick_hunt_mode()
+            if mode:
+                run_hunt(case, mode=mode)
         elif choice == "7":
             rebuild_profile(case)
         elif choice == "8":
