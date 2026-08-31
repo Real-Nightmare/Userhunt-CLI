@@ -331,7 +331,17 @@ def run_deep_hunt(case: Case) -> None:
 
     # Run the scan inside a Rich Live display for the tool status table
     # The scan blocks the main thread — that's intentional so the Live table works
-    with Live(console=console, refresh_per_second=2, screen=False) as live:
+    with Live(console=console, refresh_per_second=4, screen=False) as live:
+        # Wire up callback so each tool completion refreshes the table
+        def _refresh_live():
+            try:
+                live.update(_make_live_status_table(
+                    scan_manager, case.round or 1, config.hunt.max_rounds,
+                    time.time() - start_time, len(case.hits)))
+            except Exception:
+                pass
+        scan_manager.on_tool_done = _refresh_live
+
         # Show initial table with all tools PENDING
         live.update(_make_live_status_table(scan_manager, 1, config.hunt.max_rounds, 0, 0))
 
@@ -349,21 +359,23 @@ def run_deep_hunt(case: Case) -> None:
             usernames = [u for u in case.usernames if u not in case.done_usernames]
             if usernames:
                 dashboard.log(f"Scanning {len(usernames)} username(s)...", source="username")
-                console.print(f">> deep username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})")
+                sys.stderr.write(f">> deep username: {', '.join(usernames[:5])} (round {rnd}/{config.hunt.max_rounds})\n")
+                sys.stderr.flush()
                 round_hits = scan_manager.scan_usernames(usernames)
                 for hit in round_hits:
                     case.add_hit(hit)
                 for u in usernames:
                     case.done_usernames.add(u)
                 dashboard.log(f"Username scan: {len(round_hits)} hits", source="username")
-                # Update live table after each scanner category
+                # Update live table after username scan category
                 live.update(_make_live_status_table(scan_manager, rnd, config.hunt.max_rounds, time.time() - start_time, len(case.hits)))
 
             # ── Email hunt ──
             emails = [e for e in case.emails if e not in case.done_emails]
             if emails:
                 dashboard.log(f"Scanning {len(emails)} email(s)...", source="email")
-                console.print(f">> deep email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})")
+                sys.stderr.write(f">> deep email: {', '.join(emails[:5])} (round {rnd}/{config.hunt.max_rounds})\n")
+                sys.stderr.flush()
                 round_hits = scan_manager.scan_emails(emails)
                 for hit in round_hits:
                     case.add_hit(hit)
@@ -376,7 +388,8 @@ def run_deep_hunt(case: Case) -> None:
             names = [n for n in case.names if n not in case.done_names]
             if names:
                 dashboard.log(f"Scanning {len(names)} name(s)...", source="name")
-                console.print(f">> deep name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})")
+                sys.stderr.write(f">> deep name: {', '.join(n[:20] for n in names[:3])} (round {rnd}/{config.hunt.max_rounds})\n")
+                sys.stderr.flush()
                 round_hits = scan_manager.scan_names(names)
                 for hit in round_hits:
                     case.add_hit(hit)
@@ -416,7 +429,8 @@ def run_deep_hunt(case: Case) -> None:
 
             # ── Evidence collection (link visitor) ──
             dashboard.log("Collecting evidence from hit pages...", source="evidence")
-            console.print("   [dim]Collecting evidence from hit pages...[/dim]")
+            sys.stderr.write("   Collecting evidence from hit pages...\n")
+            sys.stderr.flush()
             evidence_collector.visit_links(case.hits, rnd)
 
             # ── Confidence scoring ──
@@ -425,7 +439,8 @@ def run_deep_hunt(case: Case) -> None:
             # ── AI review ──
             if ai_engine:
                 dashboard.log("AI reviewing scan results...", source="ai")
-                console.print("   [dim]AI reviewing scan results...[/dim]")
+                sys.stderr.write("   AI reviewing scan results...\n")
+                sys.stderr.flush()
                 ai_engine.review_round(case, rnd)
 
             # ── Pivot extraction and queueing ──
@@ -467,10 +482,11 @@ def run_deep_hunt(case: Case) -> None:
                 f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.",
                 source="hunt",
             )
-            console.print(
-                f"[dim]Round {rnd} complete. {len(case.hits)} total hits. "
-                f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.[/dim]"
+            sys.stderr.write(
+                f"Round {rnd} complete. {len(case.hits)} total hits. "
+                f"{len(pivots)} pivots found. {elapsed:.1f}s elapsed.\n"
             )
+            sys.stderr.flush()
 
             # Update case save
             case.save(ws / "data" / "case.json")

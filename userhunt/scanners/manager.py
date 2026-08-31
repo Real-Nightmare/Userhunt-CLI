@@ -2,10 +2,13 @@
 Scan manager — orchestrates all OSINT scanners.
 Tracks per-tool status (pending/running/ok/fail/error) with hit counts and timing.
 Provides live status dict for the CLI's Rich Live table.
+
+IMPORTANT: All print output goes to stderr to avoid Rich Live display conflicts.
 """
+import sys
 import time
 import traceback
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from userhunt.config import Config
 from userhunt.scanners.base import BaseScanner
@@ -17,6 +20,12 @@ from userhunt.scanners.name import NameScanner
 from userhunt.scanners.url import URLScanner
 from userhunt.scanners.browser import BrowserManager
 from userhunt.web.store import store
+
+
+def _log(msg: str) -> None:
+    """Print to stderr so Rich Live doesn't swallow it."""
+    sys.stderr.write(f"{msg}\n")
+    sys.stderr.flush()
 
 
 class ToolStatus:
@@ -86,6 +95,8 @@ class ScanManager:
         self.browser = BrowserManager(config)
         # Live tool status dict — keyed by tool name
         self.tool_status: Dict[str, ToolStatus] = {}
+        # Callback fired after each tool completes (for Live table refresh)
+        self.on_tool_done: Optional[Callable[[], None]] = None
         self._init_tool_status()
 
     def _init_tool_status(self) -> None:
@@ -172,10 +183,11 @@ class ScanManager:
         return deduped
 
     def _run_tool(self, tool_name: str, func, *args, **kwargs) -> List[Dict[str, Any]]:
-        """Run a tool function, tracking status live."""
+        """Run a tool function, tracking status live. Fires on_tool_done callback."""
         ts = self.tool_status.get(tool_name)
         if ts:
             ts.start()
+            _log(f"  ▶ {tool_name} started")
             store.log(f"▶ {tool_name} started", source=tool_name)
         try:
             result = func(*args, **kwargs)
@@ -183,22 +195,35 @@ class ScanManager:
             if ts:
                 ts.finish_ok(len(hits))
                 elapsed = f"{ts.elapsed:.1f}s"
+                _log(f"  ✓ {tool_name}: {len(hits)} hits ({elapsed})")
                 store.log(f"✓ {tool_name}: {len(hits)} hits ({elapsed})", source=tool_name)
+            # Fire callback so Live table refreshes
+            if self.on_tool_done:
+                try:
+                    self.on_tool_done()
+                except Exception:
+                    pass
             return hits
         except Exception as e:
             if ts:
                 ts.finish_fail(str(e))
+                _log(f"  ✗ {tool_name}: {e}")
                 store.log(f"✗ {tool_name}: {e}", level="error", source=tool_name)
+            # Fire callback even on failure
+            if self.on_tool_done:
+                try:
+                    self.on_tool_done()
+                except Exception:
+                    pass
             return []
 
     # ── Username scanner delegation ─────────────────────────────────
 
     def scan_usernames(self, usernames: List[str]) -> List[Dict[str, Any]]:
         """Run all username-capable scanners with per-tool tracking."""
-        print(f"\n  [bold]Running username scanners for: {', '.join(usernames[:3])}[/bold]", flush=True)
+        _log(f"  Running username scanners for: {', '.join(usernames[:3])}")
         store.log(f"Starting username scan: {usernames[:5]}", source="scan_manager")
 
-        # Get the UsernameScanner instance
         username_scanner = None
         for s in self.scanners:
             if isinstance(s, UsernameScanner):
@@ -210,37 +235,36 @@ class ScanManager:
 
         all_hits: List[Dict[str, Any]] = []
 
-        # Run each tool individually so we can track it
         # 1. WhatsMyName
-        print("    [dim]→ WhatsMyName...[/dim]", flush=True)
+        _log("    → WhatsMyName...")
         wmn_hits = self._run_tool("WhatsMyName", self._run_wmn, username_scanner, usernames)
 
         # 2. Direct probes
-        print("    [dim]→ Direct Probes (40+ platforms)...[/dim]", flush=True)
+        _log("    → Direct Probes (40+ platforms)...")
         dp_hits = self._run_tool("DirectProbes", self._run_direct_probers, username_scanner, usernames)
 
         # 3. GitHub events
-        print("    [dim]→ GitHub Events...[/dim]", flush=True)
+        _log("    → GitHub Events...")
         gh_hits = self._run_tool("GitHubEvents", self._run_github_events, username_scanner, usernames)
 
         # 4. Roblox
-        print("    [dim]→ Roblox Probe...[/dim]", flush=True)
+        _log("    → Roblox Probe...")
         rb_hits = self._run_tool("RobloxProbe", self._run_roblox, username_scanner, usernames)
 
         # 5. Sherlock
-        print("    [dim]→ Sherlock (500+ sites)...[/dim]", flush=True)
+        _log("    → Sherlock (500+ sites)...")
         sh_hits = self._run_tool("Sherlock", username_scanner._run_sherlock, usernames)
 
         # 6. Maigret
-        print("    [dim]→ Maigret (2550 sites)...[/dim]", flush=True)
+        _log("    → Maigret (2550 sites)...")
         mg_hits = self._run_tool("Maigret", username_scanner._run_maigret, usernames)
 
         # 7. Nexfil
-        print("    [dim]→ Nexfil...[/dim]", flush=True)
+        _log("    → Nexfil...")
         nx_hits = self._run_tool("Nexfil", username_scanner._run_nexfil, usernames)
 
         # 8. Blackbird
-        print("    [dim]→ Blackbird (400+ sites)...[/dim]", flush=True)
+        _log("    → Blackbird (400+ sites)...")
         bb_hits = self._run_tool("Blackbird", username_scanner._run_blackbird, usernames)
 
         all_hits.extend(wmn_hits + dp_hits + gh_hits + rb_hits + sh_hits + mg_hits + nx_hits + bb_hits)
@@ -256,6 +280,7 @@ class ScanManager:
             return hits
         from concurrent.futures import ThreadPoolExecutor, as_completed
         for username in usernames:
+            _log(f"    WhatsMyName: probing ALL {len(sites)} sites")
             store.log(f"WhatsMyName: probing ALL {len(sites)} sites", source="wmn")
             with ThreadPoolExecutor(max_workers=50) as executor:
                 futures = {executor.submit(scanner._probe_wmn_site, site, username): site for site in sites}
@@ -272,6 +297,7 @@ class ScanManager:
     def _run_direct_probers(self, scanner: UsernameScanner, usernames: List[str]) -> List[Dict[str, Any]]:
         hits: List[Dict[str, Any]] = []
         for username in usernames:
+            _log(f"    Direct probing ALL platforms: {username}")
             store.log(f"Direct probing ALL platforms: {username}", source="direct")
             hits.extend(scanner._direct_probers(username))
         return hits
@@ -291,7 +317,7 @@ class ScanManager:
     # ── Email scanner delegation ────────────────────────────────────
 
     def scan_emails(self, emails: List[str]) -> List[Dict[str, Any]]:
-        print(f"\n  [bold]Running email scanners for: {', '.join(emails[:3])}[/bold]", flush=True)
+        _log(f"  Running email scanners for: {', '.join(emails[:3])}")
         store.log(f"Starting email scan: {emails[:5]}", source="scan_manager")
 
         email_scanner = None
@@ -304,32 +330,30 @@ class ScanManager:
 
         all_hits: List[Dict[str, Any]] = []
 
-        # Run each tool individually
-        print("    [dim]→ Gravatar...[/dim]", flush=True)
+        _log("    → Gravatar...")
         for email in emails:
             all_hits.extend(self._run_tool("Gravatar", email_scanner._gravatar, email))
 
-        print("    [dim]→ emailrep.io...[/dim]", flush=True)
+        _log("    → emailrep.io...")
         for email in emails:
             all_hits.extend(self._run_tool("emailrep", email_scanner._emailrep, email))
 
-        print("    [dim]→ MX Lookup...[/dim]", flush=True)
+        _log("    → MX Lookup...")
         for email in emails:
             all_hits.extend(self._run_tool("MX_Lookup", email_scanner._mx_lookup, email))
 
-        print("    [dim]→ Holehe (120+ modules)...[/dim]", flush=True)
+        _log("    → Holehe (120+ modules)...")
         all_hits.extend(self._run_tool("Holehe", email_scanner._holehe, emails))
 
-        print("    [dim]→ Blackbird email (400+ sites)...[/dim]", flush=True)
+        _log("    → Blackbird email (400+ sites)...")
         all_hits.extend(self._run_tool("BlackbirdEmail", email_scanner._blackbird_email, emails))
 
-        print("    [dim]→ h8mail...[/dim]", flush=True)
+        _log("    → h8mail...")
         all_hits.extend(self._run_tool("h8mail", email_scanner._h8mail, emails))
 
-        print("    [dim]→ email2phonenumber...[/dim]", flush=True)
+        _log("    → email2phonenumber...")
         all_hits.extend(self._run_tool("Email2Phone", email_scanner._email2phonenumber, emails))
 
-        # Deduplicate
         seen = set()
         deduped: List[Dict[str, Any]] = []
         for h in all_hits:
@@ -343,7 +367,7 @@ class ScanManager:
     # ── Name scanner delegation ─────────────────────────────────────
 
     def scan_names(self, names: List[str]) -> List[Dict[str, Any]]:
-        print(f"\n  [bold]Running name scanners for: {', '.join(n[:20] for n in names[:3])}[/bold]", flush=True)
+        _log(f"  Running name scanners for: {', '.join(n[:20] for n in names[:3])}")
         store.log(f"Starting name scan: {names[:5]}", source="scan_manager")
 
         name_scanner = None
@@ -356,13 +380,12 @@ class ScanManager:
 
         all_hits: List[Dict[str, Any]] = []
 
-        print("    [dim]→ Username permutations...[/dim]", flush=True)
-        print("    [dim]→ Name→email Gravatar...[/dim]", flush=True)
-        print("    [dim]→ Wikipedia...[/dim]", flush=True)
-        print("    [dim]→ HackerNews...[/dim]", flush=True)
+        _log("    → Username permutations...")
+        _log("    → Name→email Gravatar...")
+        _log("    → Wikipedia...")
+        _log("    → HackerNews...")
         all_hits = self._run_tool("NamePerms", name_scanner.scan_names, names)
 
-        # Deduplicate
         seen = set()
         deduped: List[Dict[str, Any]] = []
         for h in all_hits:
@@ -376,7 +399,7 @@ class ScanManager:
     # ── Phone scanner delegation ────────────────────────────────────
 
     def scan_phones(self, phones: List[str]) -> List[Dict[str, Any]]:
-        print(f"\n  [bold]Running phone scanners for: {len(phones)} number(s)[/bold]", flush=True)
+        _log(f"  Running phone scanners for: {len(phones)} number(s)")
         store.log(f"Starting phone scan: {phones[:5]}", source="scan_manager")
 
         phone_scanner = None
@@ -390,7 +413,7 @@ class ScanManager:
         all_hits: List[Dict[str, Any]] = []
 
         for phone in phones:
-            print(f"    [dim]→ Phonenumbers parse: {phone}...[/dim]", flush=True)
+            _log(f"    → Phonenumbers parse: {phone}...")
             info = phone_scanner._parse_phone(phone)
             if info:
                 hit = phone_scanner._make_hit(
@@ -400,10 +423,10 @@ class ScanManager:
                 all_hits.append(hit)
                 store.add_hit(hit)
 
-            print(f"    [dim]→ Ignorant: {phone}...[/dim]", flush=True)
+            _log(f"    → Ignorant: {phone}...")
             all_hits.extend(self._run_tool("Ignorant", phone_scanner._ignorant, phone))
 
-            print(f"    [dim]→ PhoneInfoga: {phone}...[/dim]", flush=True)
+            _log(f"    → PhoneInfoga: {phone}...")
             all_hits.extend(self._run_tool("PhoneInfoga", phone_scanner._phoneinfoga, phone))
 
         # Mark phonenumbers tool status
@@ -425,7 +448,7 @@ class ScanManager:
     # ── Domain scanner delegation ───────────────────────────────────
 
     def scan_domains(self, domains: List[str]) -> List[Dict[str, Any]]:
-        print(f"\n  [bold]Running domain scanners for: {', '.join(domains[:3])}[/bold]", flush=True)
+        _log(f"  Running domain scanners for: {', '.join(domains[:3])}")
         store.log(f"Starting domain scan: {domains[:5]}", source="scan_manager")
 
         domain_scanner = None
@@ -452,7 +475,7 @@ class ScanManager:
         ]
 
         for tool_name, desc, func in tool_map:
-            print(f"    [dim]→ {desc}...[/dim]", flush=True)
+            _log(f"    → {desc}...")
             for domain in domains[:20]:
                 all_hits.extend(self._run_tool(tool_name, func, domain))
 
@@ -469,7 +492,7 @@ class ScanManager:
     # ── URL scanner delegation ──────────────────────────────────────
 
     def scan_urls(self, urls: List[str]) -> List[Dict[str, Any]]:
-        print(f"\n  [bold]Running URL scanners for: {len(urls)} url(s)[/bold]", flush=True)
+        _log(f"  Running URL scanners for: {len(urls)} url(s)")
         store.log(f"Starting URL scan: {urls[:5]}", source="scan_manager")
 
         url_scanner = None
@@ -482,9 +505,9 @@ class ScanManager:
 
         all_hits: List[Dict[str, Any]] = []
         for url in urls[:20]:
-            print(f"    [dim]→ Wayback availability: {url[:60]}...[/dim]", flush=True)
+            _log(f"    → Wayback availability: {url[:60]}...")
             all_hits.extend(self._run_tool("WaybackURL", url_scanner._wayback_availability, url))
-            print(f"    [dim]→ Photon spider: {url[:60]}...[/dim]", flush=True)
+            _log(f"    → Photon spider: {url[:60]}...")
             all_hits.extend(self._run_tool("Photon", url_scanner._photon, url))
 
         seen = set()
@@ -500,7 +523,7 @@ class ScanManager:
     # ── Clue scanner ────────────────────────────────────────────────
 
     def scan_clues(self, clues: List[str]) -> List[Dict[str, Any]]:
-        print(f"\n  [bold]Running clue scanners for: {len(clues)} clue(s)[/bold]", flush=True)
+        _log(f"  Running clue scanners for: {len(clues)} clue(s)")
         store.log(f"Starting clue scan: {clues[:5]}", source="scan_manager")
         hits: List[Dict[str, Any]] = []
         for scanner in self.scanners:
@@ -512,9 +535,9 @@ class ScanManager:
                             h["confidence"] = self._confidence(h.get("platform", ""))
                         hits.append(h)
                     if found:
-                        print(f"  [green]✓[/green] {scanner.name}: {len(found)} hits", flush=True)
+                        _log(f"  ✓ {scanner.name}: {len(found)} hits")
                 except Exception as e:
-                    print(f"  [red]✗[/red] {scanner.name}: {e}", flush=True)
+                    _log(f"  ✗ {scanner.name}: {e}")
         return self._dedupe_hits(hits)
 
     # ── Status table for Rich Live ──────────────────────────────────
