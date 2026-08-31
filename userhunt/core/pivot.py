@@ -53,11 +53,11 @@ class PivotEngine:
                     "by": "ai",
                 })
 
-        # Deduplicate
+        # Deduplicate — BUG FIX: use "found" not "value"
         seen = set()
         deduped: List[Dict[str, Any]] = []
         for p in pivots:
-            key = (p.get("action", ""), p.get("value", "").lower())
+            key = (p.get("action", ""), p.get("found", "").lower())
             if key not in seen:
                 seen.add(key)
                 deduped.append(p)
@@ -113,7 +113,7 @@ class PivotEngine:
         applied: List[Dict[str, Any]] = []
         for pivot in pivots:
             action = pivot.get("action", "")
-            value = pivot.get("value", "")
+            value = pivot.get("found", "")  # BUG FIX: use "found" not "value"
             if not value:
                 continue
 
