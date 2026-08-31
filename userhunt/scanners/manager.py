@@ -230,6 +230,49 @@ class ScanManager:
 
     # ── Username scanner delegation ─────────────────────────────────
 
+    def _run_tool_raw(self, tool_name: str, func, *args, **kwargs) -> List[Dict[str, Any]]:
+        """Run a tool WITHOUT firing callbacks (safe for worker threads)."""
+        ts = self.tool_status.get(tool_name)
+        if ts:
+            ts.start()
+            _log(f"  \u25b6 {tool_name} started")
+            store.log(f"\u25b6 {tool_name} started", source=tool_name)
+        try:
+            result = func(*args, **kwargs)
+            hits = result if isinstance(result, list) else []
+            if ts:
+                ts.finish_ok(len(hits))
+                _log(f"  \u2713 {tool_name}: {len(hits)} hits ({ts.elapsed:.1f}s)")
+                store.log(f"\u2713 {tool_name}: {len(hits)} hits ({ts.elapsed:.1f}s)", source=tool_name)
+            return hits
+        except Exception as e:
+            if ts:
+                ts.finish_fail(str(e))
+                _log(f"  \u2717 {tool_name}: {e}")
+                store.log(f"\u2717 {tool_name}: {e}", level="error", source=tool_name)
+            return []
+
+    def _parallel_run(self, tools: list, label: str = "tools") -> List[Dict[str, Any]]:
+        """Run tools in parallel, polling completion from main thread.
+        Returns combined hits."""
+        _log(f"  Launching {len(tools)} {label} in parallel...")
+        all_hits: List[Dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=min(len(tools), 8)) as executor:
+            futures = {
+                executor.submit(self._run_tool_raw, name, func, *args): name
+                for name, func, *args in tools
+            }
+            for future in as_completed(futures):
+                try:
+                    hits = future.result()
+                    if hits:
+                        all_hits.extend(hits)
+                except Exception:
+                    pass
+                # Fire callback from main thread after each tool completes
+                self._fire_done()
+        return all_hits
+
     def scan_usernames(self, usernames: List[str], mode: str = "full") -> List[Dict[str, Any]]:
         """Run ALL username scanners in PARALLEL. mode: quick/full/deep."""
         _log(f"  Running {mode} username scanners for: {', '.join(usernames[:3])}")
@@ -258,22 +301,14 @@ class ScanManager:
                 ("Blackbird", username_scanner._run_blackbird, usernames),
             ])
 
-        # Launch ALL tools in parallel
-        _log(f"  Launching {len(tools)} username tools in parallel...")
-        all_hits: List[Dict[str, Any]] = []
-        with ThreadPoolExecutor(max_workers=len(tools)) as executor:
-            futures = {
-                executor.submit(self._run_tool, name, func, *args): name
-                for name, func, *args in tools
-            }
-            for future in as_completed(futures):
-                try:
-                    hits = future.result()
-                    if hits:
-                        all_hits.extend(hits)
-                except Exception:
-                    pass
+        # Mark all as RUNNING before launch
+        for name, _, _ in tools:
+            ts = self.tool_status.get(name)
+            if ts:
+                ts.start()
+        self._fire_start()  # single update from main thread
 
+        all_hits = self._parallel_run(tools, "username tools")
         store.log(f"Username scan complete: {len(all_hits)} total hits", source="username_scanner")
         return self._dedupe_hits(all_hits)
 
@@ -334,42 +369,33 @@ class ScanManager:
         if not email_scanner:
             return []
 
-        tools = [
-            ("Gravatar", email_scanner._gravatar, emails[0]) if emails else None,
-            ("emailrep", email_scanner._emailrep, emails[0]) if emails else None,
-            ("MX_Lookup", email_scanner._mx_lookup, emails[0]) if emails else None,
+        tools = []
+        if emails:
+            tools.extend([
+                ("Gravatar", email_scanner._gravatar, emails[0]),
+                ("emailrep", email_scanner._emailrep, emails[0]),
+                ("MX_Lookup", email_scanner._mx_lookup, emails[0]),
+            ])
+        tools.extend([
             ("Holehe", email_scanner._holehe, emails),
             ("BlackbirdEmail", email_scanner._blackbird_email, emails),
-        ]
+        ])
         if mode in ("full", "deep"):
             tools.extend([
                 ("h8mail", email_scanner._h8mail, emails),
                 ("Email2Phone", email_scanner._email2phonenumber, emails),
             ])
-        tools = [t for t in tools if t is not None]
 
-        _log(f"  Launching {len(tools)} email tools in parallel...")
-        all_hits: List[Dict[str, Any]] = []
-        with ThreadPoolExecutor(max_workers=len(tools)) as executor:
-            futures = {
-                executor.submit(self._run_tool, name, func, *args): name
-                for name, func, *args in tools
-            }
-            for future in as_completed(futures):
-                try:
-                    hits = future.result()
-                    if hits:
-                        all_hits.extend(hits)
-                except Exception:
-                    pass
+        for name, _, _ in tools:
+            ts = self.tool_status.get(name)
+            if ts:
+                ts.start()
+        self._fire_start()
+
+        all_hits = self._parallel_run(tools, "email tools")
 
         seen = set()
-        deduped: List[Dict[str, Any]] = []
-        for h in all_hits:
-            key = (h.get("platform", "").lower(), h.get("url", ""))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(h)
+        deduped = [h for h in all_hits if not ((k := (h.get("platform", "").lower(), h.get("url", ""))) in seen or seen.add(k))]
         store.log(f"Email scan complete: {len(deduped)} hits", source="email_scanner")
         return deduped
 
@@ -420,17 +446,12 @@ class ScanManager:
         if not phone_scanner:
             return []
 
-        all_hits: List[Dict[str, Any]] = []
         phone = phones[0] if phones else None
         if not phone:
             return []
 
-        tools = [
-            ("Ignorant", phone_scanner._ignorant, phone),
-            ("PhoneInfoga", phone_scanner._phoneinfoga, phone),
-        ]
-
-        # Phonenumbers parse (inline, not a tool call)
+        # Phonenumbers parse (inline)
+        all_hits: List[Dict[str, Any]] = []
         info = phone_scanner._parse_phone(phone)
         if info:
             hit = phone_scanner._make_hit(platform="phonenumbers", url=f"phone://{phone}", confidence="MEDIUM", data=info)
@@ -440,18 +461,18 @@ class ScanManager:
         if ts:
             ts.start()
             ts.finish_ok(1 if info else 0)
-            self._fire_done()
 
-        _log(f"  Launching {len(tools)} phone tools in parallel...")
-        with ThreadPoolExecutor(max_workers=len(tools)) as executor:
-            futures = {executor.submit(self._run_tool, n, f, *a): n for n, f, a in tools}
-            for future in as_completed(futures):
-                try:
-                    hits = future.result()
-                    if hits:
-                        all_hits.extend(hits)
-                except Exception:
-                    pass
+        tools = [
+            ("Ignorant", phone_scanner._ignorant, phone),
+            ("PhoneInfoga", phone_scanner._phoneinfoga, phone),
+        ]
+        for name, _, _ in tools:
+            ts2 = self.tool_status.get(name)
+            if ts2:
+                ts2.start()
+        self._fire_start()
+
+        all_hits.extend(self._parallel_run(tools, "phone tools"))
 
         seen = set()
         deduped = [h for h in all_hits if not ((k := (h.get("platform", "").lower(), h.get("url", ""))) in seen or seen.add(k))]
@@ -473,49 +494,36 @@ class ScanManager:
         if not domain_scanner:
             return []
 
-        # Build tool list — one entry per (tool_name, domain) pair
-        tools = []
         domain = domains[0] if domains else None
-        if domain:
-            base_tools = [
-                ("WHOIS", domain_scanner._whois, domain),
-                ("RDAP", domain_scanner._rdap, domain),
-                ("DNS", domain_scanner._dns, domain),
-                ("IP-API", domain_scanner._ip_api, domain),
-                ("crt.sh", domain_scanner._crt_sh, domain),
-                ("Wayback", domain_scanner._wayback, domain),
-            ]
-            if mode in ("full", "deep"):
-                base_tools.extend([
-                    ("Sublist3r", domain_scanner._sublist3r, domain),
-                    ("FinalRecon", domain_scanner._finalrecon, domain),
-                    ("Waymore", domain_scanner._waymore, domain),
-                    ("theHarvester", domain_scanner._theharvester, domain),
-                ])
-            tools = base_tools
+        if not domain:
+            return []
 
-        _log(f"  Launching {len(tools)} domain tools in parallel...")
-        all_hits: List[Dict[str, Any]] = []
-        with ThreadPoolExecutor(max_workers=min(len(tools), 10)) as executor:
-            futures = {
-                executor.submit(self._run_tool, name, func, *args): name
-                for name, func, *args in tools
-            }
-            for future in as_completed(futures):
-                try:
-                    hits = future.result()
-                    if hits:
-                        all_hits.extend(hits)
-                except Exception:
-                    pass
+        tools = [
+            ("WHOIS", domain_scanner._whois, domain),
+            ("RDAP", domain_scanner._rdap, domain),
+            ("DNS", domain_scanner._dns, domain),
+            ("IP-API", domain_scanner._ip_api, domain),
+            ("crt.sh", domain_scanner._crt_sh, domain),
+            ("Wayback", domain_scanner._wayback, domain),
+        ]
+        if mode in ("full", "deep"):
+            tools.extend([
+                ("Sublist3r", domain_scanner._sublist3r, domain),
+                ("FinalRecon", domain_scanner._finalrecon, domain),
+                ("Waymore", domain_scanner._waymore, domain),
+                ("theHarvester", domain_scanner._theharvester, domain),
+            ])
+
+        for name, _, _ in tools:
+            ts = self.tool_status.get(name)
+            if ts:
+                ts.start()
+        self._fire_start()
+
+        all_hits = self._parallel_run(tools, "domain tools")
 
         seen = set()
-        deduped: List[Dict[str, Any]] = []
-        for h in all_hits:
-            key = (h.get("platform", "").lower(), h.get("url", ""))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(h)
+        deduped = [h for h in all_hits if not ((k := (h.get("platform", "").lower(), h.get("url", ""))) in seen or seen.add(k))]
         store.log(f"Domain scan complete: {len(deduped)} hits", source="domain_scanner")
         return deduped
 
@@ -534,7 +542,6 @@ class ScanManager:
         if not url_scanner:
             return []
 
-        all_hits: List[Dict[str, Any]] = []
         url = urls[0] if urls else None
         if not url:
             return []
@@ -543,16 +550,13 @@ class ScanManager:
             ("WaybackURL", url_scanner._wayback_availability, url),
             ("Photon", url_scanner._photon, url),
         ]
+        for name, _, _ in tools:
+            ts = self.tool_status.get(name)
+            if ts:
+                ts.start()
+        self._fire_start()
 
-        with ThreadPoolExecutor(max_workers=len(tools)) as executor:
-            futures = {executor.submit(self._run_tool, n, f, *a): n for n, f, a in tools}
-            for future in as_completed(futures):
-                try:
-                    hits = future.result()
-                    if hits:
-                        all_hits.extend(hits)
-                except Exception:
-                    pass
+        all_hits = self._parallel_run(tools, "URL tools")
 
         seen = set()
         deduped = [h for h in all_hits if not ((k := (h.get("platform", "").lower(), h.get("url", ""))) in seen or seen.add(k))]
