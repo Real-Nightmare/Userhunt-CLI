@@ -95,7 +95,8 @@ class ScanManager:
         self.browser = BrowserManager(config)
         # Live tool status dict — keyed by tool name
         self.tool_status: Dict[str, ToolStatus] = {}
-        # Callback fired after each tool completes (for Live table refresh)
+        # Callbacks fired on tool start/complete (for Live table refresh)
+        self.on_tool_start: Optional[Callable[[], None]] = None
         self.on_tool_done: Optional[Callable[[], None]] = None
         self._init_tool_status()
 
@@ -182,13 +183,28 @@ class ScanManager:
                 deduped.append(h)
         return deduped
 
+    def _fire_start(self) -> None:
+        if self.on_tool_start:
+            try:
+                self.on_tool_start()
+            except Exception:
+                pass
+
+    def _fire_done(self) -> None:
+        if self.on_tool_done:
+            try:
+                self.on_tool_done()
+            except Exception:
+                pass
+
     def _run_tool(self, tool_name: str, func, *args, **kwargs) -> List[Dict[str, Any]]:
-        """Run a tool function, tracking status live. Fires on_tool_done callback."""
+        """Run a tool function, tracking status live. Fires on_tool_start and on_tool_done callbacks."""
         ts = self.tool_status.get(tool_name)
         if ts:
             ts.start()
             _log(f"  ▶ {tool_name} started")
             store.log(f"▶ {tool_name} started", source=tool_name)
+            self._fire_start()
         try:
             result = func(*args, **kwargs)
             hits = result if isinstance(result, list) else []
@@ -197,24 +213,14 @@ class ScanManager:
                 elapsed = f"{ts.elapsed:.1f}s"
                 _log(f"  ✓ {tool_name}: {len(hits)} hits ({elapsed})")
                 store.log(f"✓ {tool_name}: {len(hits)} hits ({elapsed})", source=tool_name)
-            # Fire callback so Live table refreshes
-            if self.on_tool_done:
-                try:
-                    self.on_tool_done()
-                except Exception:
-                    pass
+            self._fire_done()
             return hits
         except Exception as e:
             if ts:
                 ts.finish_fail(str(e))
                 _log(f"  ✗ {tool_name}: {e}")
                 store.log(f"✗ {tool_name}: {e}", level="error", source=tool_name)
-            # Fire callback even on failure
-            if self.on_tool_done:
-                try:
-                    self.on_tool_done()
-                except Exception:
-                    pass
+            self._fire_done()
             return []
 
     # ── Username scanner delegation ─────────────────────────────────

@@ -332,7 +332,7 @@ def run_deep_hunt(case: Case) -> None:
     # Run the scan inside a Rich Live display for the tool status table
     # The scan blocks the main thread — that's intentional so the Live table works
     with Live(console=console, refresh_per_second=4, screen=False) as live:
-        # Wire up callback so each tool completion refreshes the table
+        # Wire up callbacks so the table refreshes on tool start AND completion
         def _refresh_live():
             try:
                 live.update(_make_live_status_table(
@@ -340,6 +340,7 @@ def run_deep_hunt(case: Case) -> None:
                     time.time() - start_time, len(case.hits)))
             except Exception:
                 pass
+        scan_manager.on_tool_start = _refresh_live
         scan_manager.on_tool_done = _refresh_live
 
         # Show initial table with all tools PENDING
