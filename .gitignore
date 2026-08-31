@@ -1,0 +1,58 @@
+"""
+.gitignore for Userhunt CLI development.
+"""
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Workspace (Userhunt-specific)
+userhunt_workspace/
+*.log
+
+# Environment
+.env
+.env.local
+*.pem
+*.key
+
+# Temp files
+*.tmp
+*.temp
+.cache/
+
+# OS-specific
+Thumbs.db
+.directory
